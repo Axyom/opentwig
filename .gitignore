@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.whl
+
+# venv
+.venv/
+venv/
+env/
+
+# test / docs build
+.pytest_cache/
+.mypy_cache/
+site/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# rendered audio / scratch
+*.wav
+out/
+scratch/

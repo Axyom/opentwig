@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openwig"
+version = "0.1.0"
+description = "Algorithmic composition for Bitwig Studio. Write Python, get songs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Axyom" }]
+keywords = ["bitwig", "music", "composition", "sdk", "daw", "algorithmic", "midi"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: MIDI",
+    "Operating System :: Microsoft :: Windows",
+]
+dependencies = [
+    "numpy>=1.26",
+    "PyAudioWPatch>=0.2.12.6 ; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "mkdocs-material>=9.5",
+]
+
+[project.scripts]
+openwig = "openwig.cli.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/Axyom/openwig"
+Source = "https://github.com/Axyom/openwig"
+
+# ─── Bitwig version this SDK targets ────────────────────────────────────────
+# The runtime handshake (openwig.bridge) refuses to connect if the live
+# Bitwig version is not in this set - the SDK reaches into private internals
+# that move across releases. Bump deliberately, never auto.
+[tool.openwig]
+# host.getHostVersion() reports major.minor only - see openwig/__init__.py.
+supported-bitwig-versions = ["6"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+openwig = ["controller/*.js", "controller/*.json"]
