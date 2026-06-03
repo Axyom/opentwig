@@ -21,7 +21,7 @@ into Bitwig internals that move across releases.
 """
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 # Bitwig's controller API host.getHostVersion() returns major.minor only
 # (e.g. "6.0", not "6.0.6"), so we lock against that surface - there is no
 # script-side way to distinguish 6.0.0 from 6.0.6. If a future point release
