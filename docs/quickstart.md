@@ -3,7 +3,7 @@
 Five minutes from install to a rendered `.wav`.
 
 Before you start: Bitwig Studio must be open, the controller enabled
-(Settings -> Controllers -> Add -> OpenwigBridge), and `openwig doctor` should
+(Settings -> Controllers -> openwig -> Add -> OpenwigBridge), and `openwig doctor` should
 print `compatible`.
 
 A `Note` is `(key, start_beat, duration, velocity)` with named fields and

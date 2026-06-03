@@ -27,7 +27,7 @@ scripts directory (`%USERPROFILE%\Documents\Bitwig Studio\Controller Scripts\`).
 ## 3. Enable the controller in Bitwig
 
 1. Open Bitwig Studio.
-2. **Settings -> Controllers -> Add -> OpenwigBridge**.
+2. **Settings -> Controllers -> openwig -> Add -> OpenwigBridge**.
 3. One-time. Bitwig remembers it across launches.
 
 ## 4. Verify

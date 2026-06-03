@@ -57,7 +57,7 @@ def install_controller(*, force: bool = False, dry_run: bool = False) -> int:
 
     shutil.copyfile(src, dst)
     print(f"[openwig] installed -> {dst}")
-    print("[openwig] next: Bitwig Studio -> Settings -> Controllers -> Add -> OpenwigBridge")
+    print("[openwig] next: Bitwig Studio -> Settings -> Controllers -> openwig -> Add -> OpenwigBridge")
     return 0
 
 
