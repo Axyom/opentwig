@@ -1,14 +1,14 @@
 """openwig - algorithmic composition for Bitwig Studio.
 
 Public API:
-    from openwig import Song, Track
+    from openwig import Song, Note
     s = Song(tempo=128, bars=4, clean=True)
-    s.track("BASS", device="FM-4").clip([(33, b, 0.5, 0.9) for b in range(16)])
+    s.track("BASS", device="FM-4").clip([Note(33, b, vel=0.9) for b in range(16)])
     s.play(); s.render("out.wav")
 
-Notes are plain (key, start_beat, duration, velocity) tuples - build them with
-ordinary Python. openwig deliberately stays a thin layer over Bitwig and ships
-no note/curve/arrangement generators; bring your own.
+A Note is `(key, start_beat, duration, velocity)` with named fields and defaults
+(dur=0.5, vel=1.0); raw tuples work too. openwig deliberately stays a thin layer
+over Bitwig and ships no note/curve/arrangement generators; bring your own.
 
 Submodules:
     openwig.song              Song + Track (the composition API)
@@ -30,7 +30,7 @@ __version__ = "0.1.0"
 SUPPORTED_BITWIG_VERSIONS = frozenset({"6"})   # major versions accepted (6.0, 6.1, ...)
 
 # ── high-level composition API ──────────────────────────────────────────────
-from openwig.song import Song, Track  # noqa: E402
+from openwig.song import Song, Track, Note  # noqa: E402
 from openwig.bridge import BridgeClient, BridgeError  # noqa: E402
 from openwig.wire.render import render_to_wav  # noqa: E402
 
@@ -39,6 +39,7 @@ __all__ = [
     "SUPPORTED_BITWIG_VERSIONS",
     "Song",
     "Track",
+    "Note",
     "BridgeClient",
     "BridgeError",
     "render_to_wav",

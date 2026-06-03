@@ -14,21 +14,22 @@ Free and open source (GPL-3.0). Windows only. Early beta.
 
 **[Documentation →](https://axyom.github.io/openwig/)**
 
-Notes are plain `(key, start_beat, duration, velocity)` tuples - build them with
-ordinary Python. openwig stays a thin layer over Bitwig; bring your own patterns.
+A `Note` is `(key, start_beat, duration, velocity)` with named fields and
+defaults - build them with ordinary Python. openwig stays a thin layer over
+Bitwig; bring your own patterns.
 
 ```python
-from openwig import Song
+from openwig import Song, Note
 
 s = Song(tempo=128, bars=4, clean=True)
 
 kick = s.track("KICK", device="v9 Kick")
 kick.fx("Saturator", Drive=0.20)
-kick.clip([(36, beat, 0.25, 1.0) for beat in range(16)])          # four-on-the-floor
+kick.clip([Note(36, beat, dur=0.25) for beat in range(16)])             # four-on-the-floor
 
 bass = s.track("BASS", device="FM-4")
 bass.fx("Filter")
-bass.clip([(33, beat + 0.5, 0.4, 0.85) for beat in range(16)])    # offbeat root
+bass.clip([Note(33, beat + 0.5, dur=0.4, vel=0.85) for beat in range(16)])  # offbeat root
 
 s.master(["EQ+", "Compressor+", "Peak Limiter"])
 s.play()

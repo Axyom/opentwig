@@ -6,19 +6,20 @@ Before you start: Bitwig Studio must be open, the controller enabled
 (Settings -> Controllers -> Add -> OpenwigBridge), and `openwig doctor` should
 print `compatible`.
 
-Notes are plain `(key, start_beat, duration, velocity)` tuples. openwig ships no
-pattern generators - you build the lists with ordinary Python, which is the
-whole point: anything you can express in a list comprehension, you can play.
+A `Note` is `(key, start_beat, duration, velocity)` with named fields and
+defaults (`dur=0.5`, `vel=1.0`); raw tuples work too. openwig ships no pattern
+generators - you build the lists with ordinary Python, which is the whole point:
+anything you can express in a list comprehension, you can play.
 
 ## 1. A kick on every beat
 
 ```python
-from openwig import Song
+from openwig import Song, Note
 
 s = Song(tempo=128, bars=4, clean=True)   # 4 bars = 16 beats
 
 kick = s.track("KICK", device="v9 Kick")
-kick.clip([(36, beat, 0.25, 1.0) for beat in range(16)])
+kick.clip([Note(36, beat, dur=0.25) for beat in range(16)])
 
 s.play()
 ```
@@ -32,7 +33,7 @@ spanning the song. You should hear a kick looping at 128 BPM.
 ```python
 bass = s.track("BASS", device="FM-4")
 bass.fx("Filter")
-bass.clip([(33, beat, 0.4, 0.85) for beat in range(16)])
+bass.clip([Note(33, beat, dur=0.4, vel=0.85) for beat in range(16)])
 ```
 
 `.fx("Filter")` chains the Filter device after FM-4. The `0.85` velocity makes
@@ -42,7 +43,7 @@ the bass a touch quieter than the kick.
 
 ```python
 hats = s.track("HATS", device="v9 Hat Closed")
-hats.clip([(42, beat + 0.5, 0.2, 0.6) for beat in range(16)])
+hats.clip([Note(42, beat + 0.5, dur=0.2, vel=0.6) for beat in range(16)])
 ```
 
 Adding `0.5` to each start time puts a hat halfway between every kick.
@@ -75,16 +76,16 @@ output via WASAPI loopback. Returns the absolute path to the file.
 ## Putting it together
 
 ```python
-from openwig import Song
+from openwig import Song, Note
 
 s = Song(tempo=128, bars=4, clean=True)
 
 kick = s.track("KICK", device="v9 Kick")
-kick.clip([(36, beat, 0.25, 1.0) for beat in range(16)])
+kick.clip([Note(36, beat, dur=0.25) for beat in range(16)])
 
 bass = s.track("BASS", device="FM-4")
 bass.fx("Filter")
-bass.clip([(33, beat, 0.4, 0.85) for beat in range(16)])
+bass.clip([Note(33, beat, dur=0.4, vel=0.85) for beat in range(16)])
 
 duck = []
 for beat in range(16):
@@ -92,7 +93,7 @@ for beat in range(16):
 bass.automate("volume", duck)
 
 hats = s.track("HATS", device="v9 Hat Closed")
-hats.clip([(42, beat + 0.5, 0.2, 0.6) for beat in range(16)])
+hats.clip([Note(42, beat + 0.5, dur=0.2, vel=0.6) for beat in range(16)])
 
 s.master(["EQ+", "Compressor+", "Peak Limiter"])
 print(s.render("first.wav"))

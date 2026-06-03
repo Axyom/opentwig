@@ -1,5 +1,20 @@
 # API reference
 
+## Note
+
+`Note(key, start, dur=0.5, vel=1.0, channel=0)` - a named tuple for one note.
+Interchangeable with a plain `(key, start, dur, vel)` tuple anywhere openwig
+takes notes (`clip`, `clips`, `scene`); the named fields and defaults just make
+calls readable.
+
+```python
+from openwig import Note
+Note(36, 0.0, dur=0.25)            # kick on beat 1
+Note(60, 1.5, dur=0.5, vel=0.8)    # softer note at beat 1.5
+```
+
+---
+
 ## Song
 
 ```python

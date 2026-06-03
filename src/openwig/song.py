@@ -11,23 +11,36 @@ Consolidates the whole toolkit into Track/Song objects:
   * automation         (offline, controller internal-access path: volume / pan / device remote)
   * mix + master chain + render to .wav (loopback capture)
 
-Notes are plain (key, start_beat, duration, velocity) tuples - build them with
-ordinary Python.
+Notes are `Note(key, start, dur, vel)` tuples (or plain tuples) - build them
+with ordinary Python.
 
 Example:
-    from openwig import Song
+    from openwig import Song, Note
     s = Song(tempo=128, bars=4)
-    s.track("KICK", device="v9 Kick").clip([(36, b, 0.25, 1.0) for b in range(16)])
+    s.track("KICK", device="v9 Kick").clip([Note(36, b, dur=0.25) for b in range(16)])
     (s.track("BASS", device="FM-4").fx("Filter").fx("Saturator", Drive=0.25)
-       .clip([(33, b + 0.5, 0.4, 0.85) for b in range(16)]))
+       .clip([Note(33, b + 0.5, dur=0.4, vel=0.85) for b in range(16)]))
     s.master(["EQ+", "Compressor+", "Peak Limiter"])
     s.play(); print(s.render("song.wav"))
 """
 import os
 import time
+from typing import NamedTuple
 from openwig.wire import automation as wa
 from openwig.wire.render import render_to_wav
 from openwig.bridge import BridgeClient
+
+
+class Note(NamedTuple):
+    """A single note. A plain tuple with named fields and defaults, so you can
+    write `Note(36, beat)` instead of `(36, beat, 0.5, 1.0)`. Interchangeable
+    with raw `(key, start, dur, vel[, channel])` tuples everywhere openwig takes
+    notes - `clip()`, `clips()`, `scene()` all accept either."""
+    key: int          # MIDI note number (0-127)
+    start: float      # start position in beats, relative to the clip
+    dur: float = 0.5  # duration in beats
+    vel: float = 1.0  # velocity, 0.0-1.0
+    channel: int = 0  # MIDI channel
 
 
 def _find_bitwig_root():
