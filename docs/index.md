@@ -40,8 +40,8 @@ print(s.render("song.wav"))
 
 - [Install](install.md) - get the SDK running in five minutes.
 - [Quickstart](quickstart.md) - your first song.
-- [Compatibility](compat.md) - which Bitwig versions are supported.
-## Compatibility (short version)
+
+## Compatibility
 
 | openwig | Bitwig Studio | Python |
 |------------|---------------|--------|

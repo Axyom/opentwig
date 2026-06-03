@@ -87,9 +87,4 @@ print(s.render("first.wav"))
 
 ## Where to go next
 
-- [Algorithmic composition](tutorials/algorithmic.md) - generate notes from
-  rules instead of writing them by hand.
-- [Sidechain pump](tutorials/sidechain.md) - more pump options.
-- [Render to wav](tutorials/render.md) - stems, loopback pitfalls.
-- [Cookbook](cookbook.md) - short recipes for common tasks.
 - [API reference](reference.md) - every method.

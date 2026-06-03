@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Bitwig Studio 6.0.6** (exact - see [Compatibility](compat.md))
+- **Bitwig Studio 6.0.6** (exact)
 - **Python 3.11+**
 - **Windows**
 
