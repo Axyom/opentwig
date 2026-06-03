@@ -9,7 +9,7 @@
 ## 1. Install the Python package
 
 ```bash
-pip install git+https://github.com/Axyom/openwig.git
+pip install openwig
 ```
 
 ## 2. Install the controller script

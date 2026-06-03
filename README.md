@@ -44,7 +44,7 @@ bump the SDK when you bump Bitwig. Rendering uses WASAPI loopback (Windows).
 ## Install
 
 ```bash
-pip install git+https://github.com/Axyom/openwig.git
+pip install openwig
 python -m openwig install   # copies the controller into Bitwig's user dir
 python -m openwig doctor    # verify deps + controller + bridge
 ```
