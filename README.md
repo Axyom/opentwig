@@ -46,10 +46,13 @@ bump the SDK when you bump Bitwig. Rendering uses WASAPI loopback (Windows).
 ```bash
 pip install openwig
 python -m openwig install   # copies the controller into Bitwig's user dir
-python -m openwig doctor    # verify deps + controller + bridge
 ```
 
 Then in Bitwig: **Settings → Controllers → Add → OpenwigBridge** (one time).
+
+```bash
+python -m openwig doctor    # verify deps + controller + bridge
+```
 
 ## Contributing
 
