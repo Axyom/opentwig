@@ -12,6 +12,8 @@ Python program. Render to `.wav`, export to MIDI/JSON.
 
 Free and open source (GPL-3.0). Windows only. Early beta.
 
+**[Documentation →](https://axyom.github.io/openwig/)**
+
 ```python
 from openwig import Song
 
@@ -48,11 +50,9 @@ pip install openwig
 python -m openwig install   # copies the controller into Bitwig's user dir
 ```
 
-Then in Bitwig: **Settings → Controllers → Add → OpenwigBridge** (one time).
+Then in Bitwig: **Settings → Controllers → Add → OpenwigBridge** (one time), and verify with `python -m openwig doctor`.
 
-```bash
-python -m openwig doctor    # verify deps + controller + bridge
-```
+Full guide (requirements, troubleshooting, uninstall): **[Install docs →](https://axyom.github.io/openwig/install/)**
 
 ## Contributing
 
