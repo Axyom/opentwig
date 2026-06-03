@@ -31,7 +31,7 @@ s = Song(tempo=128, bars=16, clean=True)
 | `s.master(chain, tune)` | Build the master FX chain, e.g. `["EQ+", "Compressor+", "Peak Limiter"]`. |
 | `s.play(loop)` | Start transport. `loop=True` loops the arrangement. |
 | `s.stop()` | Stop transport. |
-| `s.render(path)` | Render to `.wav` via WASAPI loopback. Returns absolute path. |
+| `s.render(path)` | Render to `.wav` via WASAPI loopback. Returns a dict: `{path, seconds, rate, channels, rms, silent}` (`silent`/`rms` confirm it made sound). |
 | `s.clear()` | Delete all tracks and master FX. |
 | `s.set_tempo(bpm)` | Change tempo live. |
 | `s.automate_tempo(points)` | Tempo automation. `points`: `[(beat, bpm), ...]`. |

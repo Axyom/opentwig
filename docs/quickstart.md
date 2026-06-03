@@ -71,7 +71,9 @@ print(s.render("first.wav"))
 ```
 
 `render` stops the transport, plays once from the top, and captures the master
-output via WASAPI loopback. Returns the absolute path to the file.
+output via WASAPI loopback. It returns a dict with the file `path` plus
+`seconds`, `rate`, `channels`, `rms`, and `silent` - so you can confirm it
+actually made sound.
 
 ## Putting it together
 

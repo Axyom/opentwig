@@ -570,6 +570,9 @@ class Song:
         self.b.request("transport.stop"); return self
 
     def render(self, path):
+        """Render the arrangement to `path` (.wav) via WASAPI loopback. Returns a dict:
+        {path, seconds, rate, channels, rms, silent} - check `silent`/`rms` to confirm
+        it actually captured sound."""
         return render_to_wav(self.b, path, beats=self.total, tempo=self.tempo)
 
     def close(self):
