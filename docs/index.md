@@ -8,11 +8,6 @@ program, then render to `.wav`.
 
 > Free and open source (GPL-3.0). Windows only. Early beta.
 
-A `Note` is `(key, start_beat, duration, velocity)` with named fields and
-defaults - you build them with ordinary Python. openwig stays a thin layer over
-Bitwig and ships no note/curve/pattern generators, so there's nothing extra to
-learn or maintain.
-
 ```python
 from openwig import Song, Note
 
@@ -34,7 +29,6 @@ print(s.render("song.wav"))
 ## What you can do
 
 - **Build songs** - tracks, clips, devices, mix, master chain.
-- **Bring your own notes** - any `Note(key, start, dur, vel)` you generate in Python (or raw tuples).
 - **Modulators + sidechain** - fully programmatic, no GUI dragging.
 - **Automation** - offline (no playback needed) or recorded.
 - **Render** - to `.wav` via WASAPI loopback (Windows).
