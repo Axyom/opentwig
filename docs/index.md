@@ -42,4 +42,4 @@ print(s.render("song.wav"))
 
 | openwig | Bitwig Studio | Python | OS |
 |------------|---------------|--------|----|
-| 0.1.x      | **6.0.6**     | 3.11+  | Windows |
+| 0.1.x      | **6.0.x**     | 3.11+  | Windows |

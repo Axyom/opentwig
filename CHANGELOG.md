@@ -5,6 +5,16 @@ All notable changes to openwig are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+- **Recreate (Bitwig -> script).** `python -m openwig recreate -o song.py` reads
+  the open project live - tempo, tracks, mix, device chains + remote values, MIDI
+  clips (notes), and arranger automation - and emits a Python script that rebuilds
+  it. Also `openwig.read.read_project` + `openwig.recreate.to_script`.
+
+### Changed
+- `fx(name, **remotes)` matches remote names ignoring spaces/dashes/dots, so
+  `fx("Reverb", Pre_delay=0.04)` matches the remote named "Pre-delay".
+
 ### Removed
 - Modulator API (`Track.add_modulator` / `map_modulator` / `list_modulators` /
   `open_modulator_browser`). Inserting and mapping a modulator can crash Bitwig's

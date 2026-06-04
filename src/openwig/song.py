@@ -191,8 +191,12 @@ class Track:
 
     def _set_remote(self, sub, val):
         rem = (self.s.b.request("state.snapshot").get("device") or {}).get("remotes", [])
+        # normalize both sides (drop spaces/dashes/dots) so e.g. "Pre_delay"
+        # matches the remote "Pre-delay" and "R_Time" matches "R. Time".
+        norm = lambda x: "".join(c for c in str(x).lower() if c.isalnum())
+        nsub = norm(sub)
         for r in rem:
-            if r.get("exists") and sub.lower() in ("" + (r.get("name") or "")).lower():
+            if r.get("exists") and nsub in norm(r.get("name")):
                 self.s.b.request("device.set_remote", {"index": r["index"], "value": val}); return r["name"]
         names = [r.get("name") for r in rem if r.get("exists")]
         warnings.warn(f"no remote parameter matching {sub!r} on this device; ignored. "
