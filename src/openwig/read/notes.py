@@ -52,7 +52,8 @@ def walk_track(bridge, idx, max_depth=16, max_nodes=9000):
     bridge.request("track.select", {"index": idx})
     time.sleep(0.8)            # let cursorTrack follow the selection before walking
     bridge.request("obj.walk", {"max_depth": max_depth, "max_nodes": max_nodes,
-                                "no_filter": True, "prune": PRUNE})
+                                "no_filter": True, "prune": PRUNE,
+                                "no_dedup": ["device_atom_reference"]})
     time.sleep(1.0)
     r = None
     for _ in range(60):
@@ -165,6 +166,37 @@ def collect_breakpoints(node, out=None):
     return out
 
 
+def _ids_under(node, out):
+    """All integer-ish ids (object _id + numeric props) under `node`."""
+    if not isinstance(node, dict):
+        return
+    for k, v in node.items():
+        if isinstance(v, int):
+            out.add(v)
+        elif isinstance(v, str) and v.lstrip("-").isdigit():
+            out.add(int(v))
+        elif isinstance(v, list):
+            for it in v:
+                _ids_under(it, out)
+
+
+def _ref_ids(lane):
+    """Candidate target-object ids found under the lane's device_atom_reference(s)."""
+    out = set()
+
+    def rec(n):
+        if not isinstance(n, dict):
+            return
+        for v in n.values():
+            if isinstance(v, list):
+                for it in v:
+                    if isinstance(it, dict) and it.get("_cls") == "device_atom_reference":
+                        _ids_under(it, out)
+                    rec(it)
+    rec(lane)
+    return out
+
+
 def collect_automation(node, out=None):
     """Find automation lanes that actually carry breakpoints."""
     if out is None:
@@ -176,7 +208,7 @@ def collect_automation(node, out=None):
         if bps:
             bps.sort(key=lambda b: b["time"])
             out.append({"param": _param_name(node), "breakpoint_count": len(bps),
-                        "breakpoints": bps})
+                        "breakpoints": bps, "ref_ids": sorted(_ref_ids(node))})
         return out  # a lane's subtree is self-contained
     for v in node.values():
         if isinstance(v, list):
@@ -185,9 +217,52 @@ def collect_automation(node, out=None):
     return out
 
 
+def read_device_atom_map(bridge, idx, max_devices=16):
+    """Map each device-remote-param's document-atom id -> (device_index, remote_index,
+    device_name, param_name) for the track's device chain. Navigates the cursor device
+    (page 0 of each device's remote controls)."""
+    bridge.request("track.select", {"index": idx}); time.sleep(0.3)
+    for _ in range(max_devices):
+        try: bridge.request("device.select_previous")
+        except Exception: break
+    time.sleep(0.2)
+    amap = {}; last = None
+    for di in range(max_devices):
+        d = bridge.request("state.snapshot").get("device") or {}
+        if not d.get("exists"):
+            break
+        nm = d.get("name")
+        if nm == last and amap:
+            break
+        rr = bridge.request("device.remote_atom_ids") or {}
+        for pm in rr.get("params", []):
+            for aid in pm.get("atom_ids", []):
+                amap.setdefault(aid, (di, pm.get("remote_index"), nm, pm.get("name", "")))
+        last = nm
+        bridge.request("device.select_next"); time.sleep(0.1)
+    return amap
+
+
 def read_track(bridge, idx):
     tree = walk_track(bridge, idx)
-    return {"clips": collect_clips(tree), "automation": collect_automation(tree)}
+    clips = collect_clips(tree)
+    autos = collect_automation(tree)
+    # resolve each lane's target: volume / pan by class, device params by id-matching
+    needs_map = any("volume" not in (a.get("param") or "").lower()
+                    and "pan" not in (a.get("param") or "").lower() for a in autos)
+    amap = read_device_atom_map(bridge, idx) if needs_map else {}
+    for a in autos:
+        param = (a.get("param") or "").lower()
+        if "volume" in param:
+            a["target"] = {"kind": "volume"}
+        elif "pan" in param:
+            a["target"] = {"kind": "pan"}
+        else:
+            hit = next((amap[r] for r in a.get("ref_ids", []) if r in amap), None)
+            a["target"] = ({"kind": "remote", "device_index": hit[0], "remote_index": hit[1],
+                            "device": hit[2], "param": hit[3]} if hit else {"kind": "unknown"})
+        a.pop("ref_ids", None)
+    return {"clips": clips, "automation": autos}
 
 
 def main():

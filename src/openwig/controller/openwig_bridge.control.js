@@ -542,10 +542,11 @@ function _walkObj(uo1, depth, maxDepth, budget, opts) {
     var o = {}, cwo;
     try { cwo = uo1.mX_(); } catch (e) { return { _err: "mX_: " + e }; }
     try { o._cls = "" + _inv0(cwo, "bf"); } catch (e) { o._cls = "?"; }
-    if (opts.prune[o._cls]) { o._pruned = true; return o; }
     if (_IHC == null) _IHC = Java.type("java.lang.System");
     var ihc = _IHC.identityHashCode(uo1);
-    if (opts.seen[ihc]) { o._dup = true; return o; }   // walk each object once (dedup shared subtrees + break cycles)
+    o._id = ihc;                                        // object identity (for cross-reference matching)
+    if (opts.prune[o._cls]) { o._pruned = true; return o; }
+    if (opts.seen[ihc] && !(opts.noDedup && opts.noDedup[o._cls])) { o._dup = true; return o; }
     opts.seen[ihc] = true;
     var azd = _descriptors(cwo);
     var alen = (azd == null) ? 0 : azd.size();
@@ -862,7 +863,9 @@ var HANDLERS = {
         var maxNodes = Math.min(bget(p, "max_nodes", 6000) | 0, 9000);
         var pruneArr = bget(p, "prune", []), prune = {};
         for (var pi = 0; pi < pruneArr.length; pi++) prune["" + pruneArr[pi]] = true;
-        var opts = { prune: prune, noFilter: !!bget(p, "no_filter", false), seen: {} };
+        var noDedupArr = bget(p, "no_dedup", []), noDedup = {};
+        for (var ni = 0; ni < noDedupArr.length; ni++) noDedup["" + noDedupArr[ni]] = true;
+        var opts = { prune: prune, noFilter: !!bget(p, "no_filter", false), seen: {}, noDedup: noDedup };
         _runOnDocumentThread(cursorTrack, function () {
             try {
                 var root = cursorTrack.getDeepestTarget();
@@ -876,6 +879,31 @@ var HANDLERS = {
     },
     "obj.walk_result": function (p) {
         return { json: gWalk, error: gWalkErr, ready: (gWalk != null || gWalkErr != null) };
+    },
+    // CURRENT cursor device's remote-page params + the identity of each param's
+    // document atom(s). Navigate devices from Python (select_previous/next) and
+    // call this per device; match the ids against obj.walk automation-lane targets
+    // (_id) to resolve which remote a device-param automation lane drives.
+    "device.remote_atom_ids": function (p) {
+        if (_IHC == null) _IHC = Java.type("java.lang.System");
+        var params = [];
+        for (var ri = 0; ri < NUM_REMOTE; ri++) {
+            var pr = remoteControlsPage.getParameter(ri);
+            var ex; try { ex = !!pr.exists().get(); } catch (e) { ex = false; }
+            if (!ex) continue;
+            var nm; try { nm = "" + pr.name().get(); } catch (e) { nm = ""; }
+            var ids = [];
+            try {
+                var dt = pr.getDeepestTarget();
+                if (dt != null) {
+                    ids.push(_IHC.identityHashCode(dt));
+                    try { var at = _invokeNoArg(dt, "getAtom"); if (at != null) ids.push(_IHC.identityHashCode(at)); } catch (e) {}
+                    try { var fj = _fjFrom(_invokeNoArg(dt, "getAtom")); if (fj != null) ids.push(_IHC.identityHashCode(fj)); } catch (e) {}
+                }
+            } catch (e) {}
+            params.push({ remote_index: ri, name: nm, atom_ids: ids });
+        }
+        return { params: params };
     },
     // read the focused arranger clip's MIDI notes via the note-step grid (scroll-aware).
     // protocol: notes_setup -> notes_scroll(step) per window -> notes_get. grid is 16 steps wide.

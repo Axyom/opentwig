@@ -18,10 +18,12 @@ any other openwig script to reconstruct the project.
 - **Device chains** by name + each device's active remote-control values
 - **MIDI clips** - start, duration, and every note (key, start, duration,
   velocity, channel)
-- **Arranger automation** - volume/pan lanes are applied directly; device-parameter
-  lanes are read losslessly (every breakpoint) and emitted as ready-to-uncomment
-  `automate('remote', ..., remote_index=?)` lines (the reader can't yet name which
-  remote a device-param lane targets, so you set the index)
+- **Arranger automation** - volume/pan lanes, and device-parameter lanes with their
+  **target resolved** (it figures out which device + `remote_index` each lane drives,
+  via object-id matching) and emits `select_device(i)` + `automate('remote', ..., remote_index=N)`.
+  Note: breakpoint **values are read in each parameter's native units** (e.g. a filter
+  cutoff in Hz), so the target and curve shape are faithful but the absolute values of
+  non-normalized params may need scaling
 - **Effect/return tracks**
 
 ## What it does not capture (read-API gaps)

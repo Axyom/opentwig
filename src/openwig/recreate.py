@@ -180,20 +180,25 @@ def _emit_track(t: dict, var: str) -> list[str]:
         lines.append(f"{var}.clips([({_fmt_float(start)}, {_fmt_float(dur)}, {payload})])")
 
     for a in (t.get("automation") or []):
-        param = a.get("param") or ""
+        param = (a.get("param") or "").lower()
         bps = a.get("breakpoints") or []
         if not bps:
             continue
         bp_lines = ", ".join(f"({_fmt_float(b.get('time'))}, {_fmt_float(b.get('value'))})" for b in bps[:512])
-        if "volume" in param.lower():
+        tgt = a.get("target") or {}
+        kind = tgt.get("kind") or ("volume" if "volume" in param else "pan" if "pan" in param else "unknown")
+        if kind == "volume":
             lines.append(f"{var}.automate('volume', [{bp_lines}])")
-        elif "pan" in param.lower():
+        elif kind == "pan":
             lines.append(f"{var}.automate('pan', [{bp_lines}])")
+        elif kind == "remote":
+            di, ri = tgt.get("device_index", 0), tgt.get("remote_index", 0)
+            lines.append(f"{var}.select_device({di})   # {tgt.get('device', '')}: {tgt.get('param', '')}")
+            lines.append(f"{var}.automate('remote', [{bp_lines}], remote_index={ri})")
         else:
-            # Device-parameter automation: the values are preserved here, but the
-            # reader can't yet name which remote/device it targets. Set the device
-            # (select_device(i) if needed) + remote_index, then uncomment.
-            lines.append(f"# device-param automation ({len(bps)} bps) - set remote_index then uncomment:")
+            # Couldn't resolve which remote it targets (e.g. raw device knob, or a
+            # param not on remote page 0). Values preserved - set remote_index + uncomment.
+            lines.append(f"# device-param automation ({len(bps)} bps) - target unresolved; set remote_index:")
             lines.append(f"# {var}.automate('remote', [{bp_lines}], remote_index=0)")
 
     lines.append("")
