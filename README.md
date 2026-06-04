@@ -14,10 +14,6 @@ Free and open source (GPL-3.0). Windows only. Early beta.
 
 **[Documentation →](https://axyom.github.io/openwig/)**
 
-A `Note` is `(key, start_beat, duration, velocity)` with named fields and
-defaults - build them with ordinary Python. openwig stays a thin layer over
-Bitwig; bring your own patterns.
-
 ```python
 from openwig import Song, Note
 
