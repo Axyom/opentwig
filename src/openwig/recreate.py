@@ -28,8 +28,23 @@ from __future__ import annotations
 
 import datetime as _dt
 import keyword
+import os as _os
 import re
 from typing import Any
+
+
+def _factory_dir():
+    """Bitwig's factory device dir, or None if not resolvable (e.g. in CI)."""
+    try:
+        from openwig.song import FACTORY
+        return FACTORY if _os.path.isdir(FACTORY) else None
+    except Exception:
+        return None
+
+
+def _is_plugin(name, factory_dir):
+    """A device that isn't a factory `.bwdevice` (VST/AU/etc.) - can't be recreated."""
+    return bool(name) and bool(factory_dir) and not _os.path.exists(f"{factory_dir}/{name}.bwdevice")
 
 _INSTRUMENT_HINTS = (
     "Polysynth", "FM-", "Phase-", "Sampler", "Drum Machine", "Kick", "Clap",
@@ -122,7 +137,7 @@ def _emit_song_open(data: dict) -> list[str]:
             f"s = Song(tempo={_fmt_float(tempo, 120.0)}, bars={bars}, clean=True)", ""]
 
 
-def _emit_track(t: dict, var: str) -> list[str]:
+def _emit_track(t: dict, var: str, factory_dir=None) -> list[str]:
     lines: list[str] = []
     name = (t.get("name") or "").strip() or f"track_{t.get('index')}"
     kind = _classify_track(t)
@@ -132,10 +147,12 @@ def _emit_track(t: dict, var: str) -> list[str]:
         lines.append(f"{var} = s.audio_track({name!r})")
     else:
         first_dev = devs[0] if devs else None
-        if first_dev:
+        if first_dev and not _is_plugin(first_dev["name"], factory_dir):
             lines.append(f"{var} = s.track({name!r}, device={first_dev['name']!r})")
         else:
             lines.append(f"{var} = s.track({name!r})")
+            if first_dev:
+                lines.append(f"# instrument {first_dev['name']!r} is a plugin - load + configure it manually")
 
     vol = t.get("volume")
     if vol is not None:
@@ -150,6 +167,9 @@ def _emit_track(t: dict, var: str) -> list[str]:
     for d in devs[1:]:                       # FX chain = everything after the first device
         dname = d.get("name") or ""
         if not dname:
+            continue
+        if _is_plugin(dname, factory_dir):
+            lines.append(f"# {var}: plugin {dname!r} here - load + configure manually (plugin state isn't recreatable)")
             continue
         kw_parts = []
         for r in [r for r in (d.get("remotes") or []) if r.get("name")][:4]:
@@ -225,10 +245,11 @@ def to_script(data: dict, *, project_label: str = "untitled") -> str:
     """Render `data` (output of `read_project(b, with_clips=True)`) as a script."""
     lines: list[str] = [_emit_header(project_label, data)]
     lines.extend(_emit_song_open(data))
+    fdir = _factory_dir()
     for t in data.get("tracks", []):
         nm = (t.get("name") or "").strip()
         var = f"t_{t.get('index'):02d}_{_pyident(nm, str(t.get('index'))).lower()[:24]}"
-        lines.extend(_emit_track(t, var))
+        lines.extend(_emit_track(t, var, fdir))
     lines.extend(_emit_effect_tracks(data.get("effect_tracks") or []))
     lines.append("# Master chain not read back - fill in your master devices:")
     lines.append("# s.master(['EQ+', 'Compressor+', 'Peak Limiter'])")

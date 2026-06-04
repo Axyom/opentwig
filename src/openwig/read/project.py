@@ -20,11 +20,11 @@ from openwig.read.notes import read_track as _read_track_clips
 def _device_chain(b, track_idx, max_devices=12):
     """Walk a track's device chain via the cursor device. Each device record
     carries name + the active remote-control parameters with their CURRENT VALUES."""
-    b.request("track.select", {"index": track_idx}); time.sleep(0.2)
+    b.request("track.select", {"index": track_idx}); time.sleep(0.3)
     for _ in range(max_devices):                       # rewind cursor to the first device
         try: b.request("device.select_previous")
         except Exception: break
-    time.sleep(0.1)
+    time.sleep(0.35)                                   # let the first device's remote values settle
     chain = []; last = None
     for _ in range(max_devices):
         d = b.request("state.snapshot").get("device") or {}
@@ -41,7 +41,7 @@ def _device_chain(b, track_idx, max_devices=12):
                             "value": r.get("value"), "disp": r.get("disp")})
         chain.append({"name": name, "remotes": remotes})
         last = name
-        b.request("device.select_next"); time.sleep(0.08)
+        b.request("device.select_next"); time.sleep(0.35)   # let remote values update before next read
     return chain
 
 
