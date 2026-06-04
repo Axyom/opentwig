@@ -184,15 +184,17 @@ def _emit_track(t: dict, var: str) -> list[str]:
         bps = a.get("breakpoints") or []
         if not bps:
             continue
-        if "volume" in param.lower():
-            sdk_param = "volume"
-        elif "pan" in param.lower():
-            sdk_param = "pan"
-        else:
-            lines.append(f"# TODO automation: {param!r} ({len(bps)} bps) - resolve param name")
-            continue
         bp_lines = ", ".join(f"({_fmt_float(b.get('time'))}, {_fmt_float(b.get('value'))})" for b in bps[:512])
-        lines.append(f"{var}.automate({sdk_param!r}, [{bp_lines}])")
+        if "volume" in param.lower():
+            lines.append(f"{var}.automate('volume', [{bp_lines}])")
+        elif "pan" in param.lower():
+            lines.append(f"{var}.automate('pan', [{bp_lines}])")
+        else:
+            # Device-parameter automation: the values are preserved here, but the
+            # reader can't yet name which remote/device it targets. Set the device
+            # (select_device(i) if needed) + remote_index, then uncomment.
+            lines.append(f"# device-param automation ({len(bps)} bps) - set remote_index then uncomment:")
+            lines.append(f"# {var}.automate('remote', [{bp_lines}], remote_index=0)")
 
     lines.append("")
     return lines
