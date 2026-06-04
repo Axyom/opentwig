@@ -6,11 +6,6 @@ Before you start: Bitwig Studio must be open, the controller enabled
 (Settings -> Controllers -> openwig -> Add -> OpenwigBridge), and `openwig doctor` should
 print `compatible`.
 
-A `Note` is `(key, start_beat, duration, velocity)` with named fields and
-defaults (`dur=0.5`, `vel=1.0`); raw tuples work too. openwig ships no pattern
-generators - you build the lists with ordinary Python, which is the whole point:
-anything you can express in a list comprehension, you can play.
-
 ## 1. A kick on every beat
 
 ```python
@@ -33,11 +28,11 @@ spanning the song. You should hear a kick looping at 128 BPM.
 ```python
 bass = s.track("BASS", device="FM-4")
 bass.fx("Filter")
-bass.clip([Note(33, beat, dur=0.4, vel=0.85) for beat in range(16)])
+bass.clip([Note(33, beat + 0.5, dur=0.4, vel=0.85) for beat in range(16)])
 ```
 
-`.fx("Filter")` chains the Filter device after FM-4. The `0.85` velocity makes
-the bass a touch quieter than the kick.
+`.fx("Filter")` chains the Filter device after FM-4. `beat + 0.5` puts the bass
+on the off-beat, and `vel=0.85` keeps it a touch quieter than the kick.
 
 ## 3. Closed hats on the off-beats
 
@@ -48,15 +43,12 @@ hats.clip([Note(42, beat + 0.5, dur=0.2, vel=0.6) for beat in range(16)])
 
 Adding `0.5` to each start time puts a hat halfway between every kick.
 
-## 4. Side-pump the bass (build it yourself)
-
-There's no `pump` helper - a sidechain-style duck is just a volume automation
-curve you write in Python:
+## 4. Side-pump the bass
 
 ```python
 duck = []
 for beat in range(16):
-    duck += [(beat, 0.30), (beat + 0.2, 0.82)]   # drop on the beat, rebound
+    duck += [(beat, 0), (beat + 0.99, 1)]
 bass.automate("volume", duck)
 ```
 
@@ -87,11 +79,11 @@ kick.clip([Note(36, beat, dur=0.25) for beat in range(16)])
 
 bass = s.track("BASS", device="FM-4")
 bass.fx("Filter")
-bass.clip([Note(33, beat, dur=0.4, vel=0.85) for beat in range(16)])
+bass.clip([Note(33, beat+0.5, dur=0.4, vel=0.85) for beat in range(16)])
 
 duck = []
 for beat in range(16):
-    duck += [(beat, 0.30), (beat + 0.2, 0.82)]
+    duck += [(beat, 0), (beat + 0.99, 1)]
 bass.automate("volume", duck)
 
 hats = s.track("HATS", device="v9 Hat Closed")

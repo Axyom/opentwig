@@ -20,16 +20,22 @@ from openwig import Song, Note
 s = Song(tempo=128, bars=4, clean=True)
 
 kick = s.track("KICK", device="v9 Kick")
-kick.fx("Saturator", Drive=0.20)
-kick.clip([Note(36, beat, dur=0.25) for beat in range(16)])             # four-on-the-floor
+kick.clip([Note(36, beat, dur=0.25) for beat in range(16)])
 
 bass = s.track("BASS", device="FM-4")
 bass.fx("Filter")
-bass.clip([Note(33, beat + 0.5, dur=0.4, vel=0.85) for beat in range(16)])  # offbeat root
+bass.clip([Note(33, beat+0.5, dur=0.4, vel=0.85) for beat in range(16)])
+
+duck = []
+for beat in range(16):
+    duck += [(beat, 0), (beat + 0.99, 1)]
+bass.automate("volume", duck)
+
+hats = s.track("HATS", device="v9 Hat Closed")
+hats.clip([Note(42, beat + 0.5, dur=0.2, vel=0.6) for beat in range(16)])
 
 s.master(["EQ+", "Compressor+", "Peak Limiter"])
-s.play()
-print(s.render("song.wav"))
+print(s.render("first.wav"))
 ```
 
 ## Compatibility
