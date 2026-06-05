@@ -81,6 +81,10 @@ def read_project(b, with_devices=True, with_clips=False):
             "volume": t.get("volume"), "pan": t.get("pan"),
             "mute": t.get("mute"), "solo": t.get("solo"),
         })
+    try:
+        out["master"] = {"devices": (b.request("master.devices") or {}).get("devices", [])}
+    except Exception:  # noqa: BLE001
+        out["master"] = {"devices": []}
     return out
 
 

@@ -533,12 +533,15 @@ class Song:
         time.sleep(0.5); return self
 
     def master(self, chain, tune=None):
-        """Build the master FX chain (list of factory device names). tune: optional
-        {device_name: {remote_substr: value}} dialed after inserting that device."""
+        """Build the master FX chain. Each item is a factory device NAME (e.g. 'EQ+') or
+        a PATH to a .bwpreset/.bwdevice file (absolute, or containing a separator). tune:
+        optional {device_name: {remote_substr: value}} dialed after inserting that device."""
         tune = tune or {}
         self._master_spec = {"chain": list(chain), "tune": dict(tune)}
         for dev in chain:
-            self.b.request("device.insert_file_on_master", {"path": FACTORY + "/" + dev + ".bwdevice"}); time.sleep(1.0)
+            is_path = ("/" in dev or "\\" in dev or dev.endswith((".bwpreset", ".bwdevice")))
+            path = dev if is_path else f"{FACTORY}/{dev}.bwdevice"
+            self.b.request("device.insert_file_on_master", {"path": path}); time.sleep(1.0)
             for sub, val in (tune.get(dev) or {}).items():
                 for r in self.b.request("master.remotes"):
                     if r.get("exists") and sub.lower() in ("" + (r.get("name") or "")).lower():

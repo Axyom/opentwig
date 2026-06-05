@@ -955,6 +955,7 @@ var HANDLERS = {
         try { curNorm = pp.value().get(); } catch (e) { return { error: "no value" }; }
         var nf = _findNormalizeFn(fj, curNative, curNorm);
         if (nf == null) return { error: "no normalize fn", cur_native: curNative, cur_norm: curNorm };
+        if (!vals.length) return { normalized: [], cur_native: curNative, cur_norm: curNorm };
         var out = [];
         for (var i = 0; i < vals.length; i++) {
             try {
@@ -982,6 +983,16 @@ var HANDLERS = {
         for (var k in gClipNotes) out.push(gClipNotes[k]);
         out.sort(function (a, b) { return a.start - b.start || a.key - b.key; });
         return out;
+    },
+    // Master-track device chain names (for s.master([...])). Read straight from the bank.
+    "master.devices": function () {
+        var out = [];
+        for (var i = 0; i < 16; i++) {
+            var d = masterDeviceBank.getItemAt(i);
+            if (!d.exists().get()) break;
+            out.push({ index: i, name: "" + d.name().get() });
+        }
+        return { devices: out };
     },
     "master.set_remote": function (p) { masterRemotes.getParameter(bget(p, "index", 0)).value().set(bget(p, "value", 0.0)); },
     "master.remotes": function () {

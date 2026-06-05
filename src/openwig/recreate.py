@@ -186,8 +186,7 @@ Coverage: tempo, tracks ({n_tracks}), effect tracks ({n_fx}), MIDI clips
 remote values.
 
 NOT recreated (read-API gaps): track input/output routing, send levels,
-sidechain wiring, modulators, per-clip automation, plugin internal state, and
-the master device chain (fill in s.master([...]) yourself).
+sidechain wiring, modulators, per-clip automation, and plugin internal state.
 
 Per-project notes:{gap_block}
 """
@@ -312,6 +311,24 @@ def _emit_track(t: dict, var: str, factory_dir=None, preset_idx=None) -> list[st
     return lines
 
 
+def _emit_master(master: dict, factory_dir, preset_idx) -> list[str]:
+    devs = master.get("devices") or []
+    if not devs:
+        return ["# Master chain not read back - fill in your master devices:",
+                "# s.master(['EQ+', 'Compressor+', 'Peak Limiter'])", ""]
+    rows, notes = [], []
+    for d in devs:
+        nm = d.get("name") or ""
+        kind, path = _resolve_device(nm, factory_dir, preset_idx)
+        if kind == "preset":
+            rows.append(f"    {path!r},   # {nm}")
+        elif kind == "factory":
+            rows.append(f"    {nm!r},")
+        else:
+            rows.append(f"    {nm!r},   # not found as factory device / preset - may need manual load")
+    return notes + ["s.master([", *rows, "])", ""]
+
+
 def _emit_effect_tracks(efx: list[dict]) -> list[str]:
     lines = []
     for ti, t in enumerate(efx):
@@ -339,9 +356,7 @@ def to_script(data: dict, *, project_label: str = "untitled") -> str:
         var = f"t_{t.get('index'):02d}_{_pyident(nm, str(t.get('index'))).lower()[:24]}"
         lines.extend(_emit_track(t, var, factory_dir, preset_idx))
     lines.extend(_emit_effect_tracks(data.get("effect_tracks") or []))
-    lines.append("# Master chain not read back - fill in your master devices:")
-    lines.append("# s.master(['EQ+', 'Compressor+', 'Peak Limiter'])")
-    lines.append("")
+    lines.extend(_emit_master(data.get("master") or {}, factory_dir, preset_idx))
     lines.append("# s.play(loop=True)        # uncomment to hear it")
     lines.append("# print(s.render('out.wav'))")
     lines.append("")
