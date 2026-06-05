@@ -177,9 +177,22 @@ class BridgeClient:
 
     def _read_loop(self, sock):
         buf = b""
+        # Handshake watchdog: a live controller sends a "connected" notification right
+        # after accepting us. If it doesn't arrive within a few seconds we've reached a
+        # stale/zombie listener (e.g. one left briefly when Bitwig auto-reloads the
+        # script on file change and rebinds the port) - drop it and let the connect loop
+        # retry until it hits the live listener. Once the handshake lands, go fully
+        # blocking as before.
+        armed = True
+        sock.settimeout(3.0)
+        deadline = time.time() + 6.0
         while self._running:
             try:
                 chunk = sock.recv(65536)
+            except socket.timeout:
+                if armed and not self._ready.is_set() and time.time() > deadline:
+                    break                        # no handshake -> zombie; reconnect
+                continue
             except OSError:
                 break
             if not chunk:
@@ -189,6 +202,8 @@ class BridgeClient:
                 line, buf = buf.split(b"\n", 1)
                 if line.strip():
                     self._dispatch(line.decode("utf-8", "replace"))
+            if armed and self._ready.is_set():
+                sock.settimeout(None); armed = False  # handshake done - block normally
 
     def _dispatch(self, line):
         try:

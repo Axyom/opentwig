@@ -55,9 +55,17 @@ def install_controller(*, force: bool = False, dry_run: bool = False) -> int:
         print(f"[openwig] would {verb} -> {dst}")
         return 0
 
+    existed = dst.exists()
     shutil.copyfile(src, dst)
     print(f"[openwig] installed -> {dst}")
-    print("[openwig] next: Bitwig Studio -> Settings -> Controllers -> openwig -> Add -> OpenwigBridge")
+    if existed:
+        # Bitwig watches this file and auto-reloads the script a few seconds after it
+        # changes - new handlers go live with no manual step. (A reload can leave value
+        # setters / observers flaky; if controls act stale, remove + re-add the
+        # controller once in Settings -> Controllers to fully reset it.)
+        print("[openwig] Bitwig will auto-reload the controller in a few seconds.")
+    else:
+        print("[openwig] next: Bitwig Studio -> Settings -> Controllers -> openwig -> Add -> OpenwigBridge")
     return 0
 
 
