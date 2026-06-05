@@ -225,8 +225,7 @@ def _emit_param_restore(var: str, di: int, dname: str, params: list) -> list[str
         names = ", ".join(str(p.get("name")) for p in ps)
         out.append(f"{var}.set_remote_values({pg}, {{{entries}}})   # {names}")
     for p in skipped:
-        out.append(f"#   set {p.get('name')!r} = {_fmt_float(p.get('value'))} manually "
-                   f"(remote is a non-1:1 macro - can't restore via set_remote)")
+        out.append(f"#   {p.get('name')} = {_fmt_float(p.get('value'))}   (set on the device)")
     return out
 
 
