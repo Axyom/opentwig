@@ -1,15 +1,14 @@
-"""Recreated from the open Bitwig project (demo_recreated9).
-Hand-simplified for the repo (portable factory devices, factored automation).
-Generated: 2026-06-05 by openwig.recreate (live read).
+"""Nightdrive - a full demo song.
 
-Coverage: tempo, tracks (12), effect tracks (0), MIDI clips
-(51), notes (1265), arranger automation, device chains +
-remote values.
+Composed/edited in Bitwig, read back with `python -m openwig recreate`, then
+hand-simplified: portable factory devices and the automation factored into
+patterns (see the hat-decay loop). 12 tracks, ~50 arranger clips, automation,
+device chains.
 
-NOT recreated (read-API gaps): track input/output routing, send levels,
-sidechain wiring, modulators, per-clip automation, and plugin internal state.
+Run it against a scratch project - it opens with clean=True, which clears the
+currently-open Bitwig project:
 
-Per-project notes: (none)
+    python examples/nightdrive.py
 """
 
 from openwig import Song
