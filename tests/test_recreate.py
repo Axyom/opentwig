@@ -64,9 +64,52 @@ def test_notes_are_clip_relative():
     assert "(36, 1, 0.25, 0.9)" in s
 
 
-def test_automation_param_resolved():
+def test_automation_volume_normalized():
+    # volume breakpoints are raw (native): raw 1.0 -> normalized 1/1.2599 = 0.7937
     s = to_script(SAMPLE)
-    assert ".automate('volume', [(0, 0), (1, 1)])" in s
+    assert ".automate('volume', [(0, 0), (1, 0.7937)])" in s
+
+
+def test_automation_pan_normalized():
+    # pan raw -1..1 -> normalized (raw+1)/2: -1 -> 0, 1 -> 1
+    data = {"tempo": 120, "tracks": [{
+        "index": 0, "name": "T", "volume": 0.8,
+        "devices": [{"name": "FM-4", "remotes": []}], "clips": [],
+        "automation": [{"param": "pan_value_atom",
+                        "breakpoints": [{"time": 0, "value": -1.0}, {"time": 4, "value": 1.0}]}],
+    }], "effect_tracks": []}
+    assert ".automate('pan', [(0, 0), (4, 1)])" in to_script(data)
+
+
+def test_automation_remote_calibrated():
+    # a calibrated remote target: off=15, scale=85 (e.g. a Hz param) -> norm = (raw-15)/85
+    data = {"tempo": 120, "tracks": [{
+        "index": 0, "name": "T", "volume": 0.8,
+        "devices": [{"name": "Polysynth", "remotes": []}, {"name": "Delay-1", "remotes": []}],
+        "clips": [],
+        "automation": [{"param": "decimal_value_atom",
+                        "breakpoints": [{"time": 0, "value": 15.0}, {"time": 4, "value": 100.0}],
+                        "target": {"kind": "remote", "device_index": 1, "remote_index": 4,
+                                   "device": "Delay-1", "param": "Low",
+                                   "value_off": 15.0, "value_scale": 85.0}}],
+    }], "effect_tracks": []}
+    s = to_script(data)
+    assert ".automate('remote', [(0, 0), (4, 1)], remote_index=4)" in s
+
+
+def test_automation_remote_uncalibrated_keeps_raw():
+    # resolved target but no calibration -> raw values + a warning comment
+    data = {"tempo": 120, "tracks": [{
+        "index": 0, "name": "T", "volume": 0.8,
+        "devices": [{"name": "Polysynth", "remotes": []}], "clips": [],
+        "automation": [{"param": "decimal_value_atom",
+                        "breakpoints": [{"time": 0, "value": 51.0}, {"time": 4, "value": 135.0}],
+                        "target": {"kind": "remote", "device_index": 0, "remote_index": 5,
+                                   "device": "Polysynth", "param": "X"}}],
+    }], "effect_tracks": []}
+    s = to_script(data)
+    assert "uncalibrated" in s
+    assert ".automate('remote', [(0, 51), (4, 135)], remote_index=5)" in s
 
 
 def test_effect_track_emitted():

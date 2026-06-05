@@ -905,6 +905,22 @@ var HANDLERS = {
         }
         return { params: params };
     },
+    // CURRENT cursor device's remote-page params with their RAW (native) value -
+    // the same scale arranger automation breakpoints store (decimal_value_event 655).
+    // Used to calibrate native<->normalized: set a param to 0 and 1, read raw at each,
+    // and the (off, slope) affine maps native breakpoint values back to automate()'s 0..1.
+    "device.remote_raw": function (p) {
+        var params = [];
+        for (var ri = 0; ri < NUM_REMOTE; ri++) {
+            var pr = remoteControlsPage.getParameter(ri);
+            var ex; try { ex = !!pr.exists().get(); } catch (e) { ex = false; }
+            if (!ex) continue;
+            var raw = null;
+            try { raw = pr.value().getRaw(); } catch (e) {}
+            params.push({ index: ri, raw: raw });
+        }
+        return { params: params };
+    },
     // read the focused arranger clip's MIDI notes via the note-step grid (scroll-aware).
     // protocol: notes_setup -> notes_scroll(step) per window -> notes_get. grid is 16 steps wide.
     "clip.notes_setup": function (p) {

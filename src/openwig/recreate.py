@@ -126,6 +126,27 @@ def _fmt_float(x: Any, default: float = 0.0, places: int = 4) -> str:
     return s if s and s not in ("-", "-0") else "0"
 
 
+# Arranger automation breakpoints are stored in each parameter's RAW/native units,
+# but Track.automate() expects normalized 0..1. The native<->normalized map is affine
+# (verified across pitch/freq/dB/%/volume/pan): normalized = (raw - off) / scale.
+# Volume and pan use fixed Bitwig constants; device remotes are calibrated live (the
+# read step measures off/scale per target and stores them on the automation target).
+_VOL_OFF, _VOL_SCALE = 0.0, 1.2599
+_PAN_OFF, _PAN_SCALE = -1.0, 2.0
+
+
+def _norm_bps(bps, off, scale):
+    """Format breakpoints as (time, value) tuples, mapping raw value -> normalized
+    via the affine (off, scale) and clamping to 0..1. scale None/0 -> values kept raw."""
+    out = []
+    for b in bps[:512]:
+        v = b.get("value")
+        if scale and isinstance(v, (int, float)):
+            v = max(0.0, min(1.0, (v - off) / scale))
+        out.append(f"({_fmt_float(b.get('time'))}, {_fmt_float(v)})")
+    return ", ".join(out)
+
+
 def _pan_to_signed(p):
     """Snapshot pan is 0..1 (0 = full left, 0.5 = center). Track.pan takes -1..+1."""
     try:
@@ -257,22 +278,28 @@ def _emit_track(t: dict, var: str, factory_dir=None, preset_idx=None) -> list[st
         bps = a.get("breakpoints") or []
         if not bps:
             continue
-        bp_lines = ", ".join(f"({_fmt_float(b.get('time'))}, {_fmt_float(b.get('value'))})" for b in bps[:512])
         tgt = a.get("target") or {}
         kind = tgt.get("kind") or ("volume" if "volume" in param else "pan" if "pan" in param else "unknown")
         if kind == "volume":
-            lines.append(f"{var}.automate('volume', [{bp_lines}])")
+            lines.append(f"{var}.automate('volume', [{_norm_bps(bps, _VOL_OFF, _VOL_SCALE)}])")
         elif kind == "pan":
-            lines.append(f"{var}.automate('pan', [{bp_lines}])")
+            lines.append(f"{var}.automate('pan', [{_norm_bps(bps, _PAN_OFF, _PAN_SCALE)}])")
         elif kind == "remote":
             di, ri = tgt.get("device_index", 0), tgt.get("remote_index", 0)
+            off, scale = tgt.get("value_off"), tgt.get("value_scale")
             lines.append(f"{var}.select_device({di})   # {tgt.get('device', '')}: {tgt.get('param', '')}")
-            lines.append(f"{var}.automate('remote', [{bp_lines}], remote_index={ri})")
+            if scale:
+                lines.append(f"{var}.automate('remote', [{_norm_bps(bps, off, scale)}], remote_index={ri})")
+            else:
+                # target resolved but not calibrated (no live Bitwig at read time):
+                # values are RAW/native - they may need scaling to 0..1.
+                lines.append(f"# (uncalibrated - values are raw/native, may need scaling to 0..1)")
+                lines.append(f"{var}.automate('remote', [{_norm_bps(bps, 0, None)}], remote_index={ri})")
         else:
             # Couldn't resolve which remote it targets (e.g. raw device knob, or a
             # param not on remote page 0). Values preserved - set remote_index + uncomment.
             lines.append(f"# device-param automation ({len(bps)} bps) - target unresolved; set remote_index:")
-            lines.append(f"# {var}.automate('remote', [{bp_lines}], remote_index=0)")
+            lines.append(f"# {var}.automate('remote', [{_norm_bps(bps, 0, None)}], remote_index=0)")
 
     lines.append("")
     return lines

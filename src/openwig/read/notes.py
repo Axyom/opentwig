@@ -243,6 +243,42 @@ def read_device_atom_map(bridge, idx, max_devices=16):
     return amap
 
 
+def read_remote_calibration(bridge, idx, targets, settle=0.5):
+    """Measure the affine native<->normalized map for the given remote targets.
+    Breakpoint values are stored in a param's RAW/native units; automate() wants 0..1.
+    The map is affine (verified), so set each param to normalized 0 and 1, read getRaw
+    at each, and (off=raw@0, scale=raw@1 - raw@0) inverts it: norm = (raw - off) / scale.
+
+    `targets`: {device_index -> set(remote_index)}.
+    Returns {(device_index, remote_index): (off, scale)}. Non-destructive: restores
+    each param to its original value afterward.
+    """
+    out = {}
+    bridge.request("track.select", {"index": idx}); time.sleep(0.2)
+
+    def raw_now():
+        return {pm["index"]: pm.get("raw")
+                for pm in (bridge.request("device.remote_raw") or {}).get("params", [])}
+
+    for di in sorted(targets):
+        ris = sorted(targets[di])
+        bridge.request("device.select_index", {"index": int(di)}); time.sleep(0.5)
+        snap = bridge.request("state.snapshot").get("device") or {}
+        orig = {r["index"]: r.get("value") for r in snap.get("remotes", []) if r.get("exists")}
+        for ri in ris: bridge.request("device.set_remote", {"index": ri, "value": 0.0})
+        time.sleep(settle); raw0 = raw_now()
+        for ri in ris: bridge.request("device.set_remote", {"index": ri, "value": 1.0})
+        time.sleep(settle); raw1 = raw_now()
+        for ri in ris:                                     # restore originals
+            if isinstance(orig.get(ri), (int, float)):
+                bridge.request("device.set_remote", {"index": ri, "value": orig[ri]})
+        for ri in ris:
+            o, s1 = raw0.get(ri), raw1.get(ri)
+            if isinstance(o, (int, float)) and isinstance(s1, (int, float)) and abs(s1 - o) > 1e-12:
+                out[(di, ri)] = (o, s1 - o)
+    return out
+
+
 def read_track(bridge, idx):
     tree = walk_track(bridge, idx)
     clips = collect_clips(tree)
@@ -262,6 +298,20 @@ def read_track(bridge, idx):
             a["target"] = ({"kind": "remote", "device_index": hit[0], "remote_index": hit[1],
                             "device": hit[2], "param": hit[3]} if hit else {"kind": "unknown"})
         a.pop("ref_ids", None)
+    # calibrate native->normalized for the resolved remote targets (the walk reads
+    # breakpoints in raw units; automate() needs 0..1)
+    rt = {}
+    for a in autos:
+        tg = a.get("target") or {}
+        if tg.get("kind") == "remote" and tg.get("remote_index") is not None:
+            rt.setdefault(tg["device_index"], set()).add(tg["remote_index"])
+    if rt:
+        calib = read_remote_calibration(bridge, idx, rt)
+        for a in autos:
+            tg = a.get("target") or {}
+            c = calib.get((tg.get("device_index"), tg.get("remote_index"))) if tg.get("kind") == "remote" else None
+            if c:
+                tg["value_off"], tg["value_scale"] = c
     return {"clips": clips, "automation": autos}
 
 
