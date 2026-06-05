@@ -352,6 +352,15 @@ class Track:
         the page selected here."""
         self.s.b.request("device.select_remote_page", {"page": int(page)}); time.sleep(0.15); return self
 
+    def set_remote_values(self, page, values):
+        """Set remote params BY INDEX on a specific page of the CURRENTLY-selected device.
+        `values`: {remote_index: 0..1}. Used by recreate to restore tweaked device
+        parameters (select the device first)."""
+        self.s.b.request("device.select_remote_page", {"page": int(page)}); time.sleep(0.12)
+        for i, v in values.items():
+            self.s.b.request("device.set_remote", {"index": int(i), "value": float(v)}); time.sleep(0.03)
+        return self
+
     def sidechain_from(self, source_track, *, source_device_index=0, sink_device_index=None):
         """Wire this track's sidechain-capable device (e.g. Compressor+, Gate+) to
         listen to `source_track`'s signal. `source_device_index` picks which device

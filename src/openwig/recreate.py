@@ -207,12 +207,33 @@ def _emit_song_open(data: dict) -> list[str]:
             f"s = Song(tempo={_fmt_float(tempo, 120.0)}, bars={bars}, clean=True)", ""]
 
 
+def _emit_param_restore(var: str, di: int, dname: str, params: list) -> list[str]:
+    """Restore a device's changed remote params, grouped by page, by index."""
+    if not params:
+        return []
+    by_page: dict = {}
+    for p in params:
+        by_page.setdefault(p.get("page", 0), []).append(p)
+    out = [f"{var}.select_device({di})   # {dname}"]
+    for pg in sorted(by_page):
+        ps = sorted(by_page[pg], key=lambda x: x.get("index", 0))
+        entries = ", ".join(f"{p.get('index')}: {_fmt_float(p.get('value'))}" for p in ps)
+        names = ", ".join(str(p.get("name")) for p in ps)
+        out.append(f"{var}.set_remote_values({pg}, {{{entries}}})   # {names}")
+    return out
+
+
 def _emit_track(t: dict, var: str, factory_dir=None, preset_idx=None) -> list[str]:
     preset_idx = preset_idx or {}
     lines: list[str] = []
     name = (t.get("name") or "").strip() or f"track_{t.get('index')}"
     kind = _classify_track(t)
     devs = t.get("devices") or []
+
+    # When devices carry `params` (live read with default-diffing), restore those tweaked
+    # params explicitly per page after the chain is built, and don't also emit inline
+    # kwargs (which only covered page 0). Otherwise fall back to inline page-0 kwargs.
+    use_diffs = any("params" in d for d in devs)
 
     if kind == "audio":
         lines.append(f"{var} = s.audio_track({name!r})")
@@ -224,9 +245,8 @@ def _emit_track(t: dict, var: str, factory_dir=None, preset_idx=None) -> list[st
         elif dkind == "preset":
             lines.append(f"{var} = s.track({name!r})")
             lines.append(f"{var}.preset({dpath!r})   # {first_dev['name']}")
-            kw = _remote_kwargs(first_dev)
-            if kw:
-                lines.append(f"{var}.set_remotes({kw})")
+            if not use_diffs and _remote_kwargs(first_dev):
+                lines.append(f"{var}.set_remotes({_remote_kwargs(first_dev)})")
         else:
             lines.append(f"{var} = s.track({name!r})")
             if first_dev:
@@ -248,15 +268,18 @@ def _emit_track(t: dict, var: str, factory_dir=None, preset_idx=None) -> list[st
             continue
         dkind, dpath = _resolve_device(dname, factory_dir, preset_idx)
         if dkind == "factory":
-            kw = _remote_kwargs(d)
+            kw = "" if use_diffs else _remote_kwargs(d)
             lines.append(f"{var}.fx({dname!r}" + ((", " + kw) if kw else "") + ")")
         elif dkind == "preset":
             lines.append(f"{var}.preset({dpath!r})   # {dname}")
-            kw = _remote_kwargs(d)
-            if kw:
-                lines.append(f"{var}.set_remotes({kw})")
+            if not use_diffs and _remote_kwargs(d):
+                lines.append(f"{var}.set_remotes({_remote_kwargs(d)})")
         else:
             lines.append(f"# {var}: {dname!r} - no factory device / preset found; load manually")
+
+    if use_diffs:                            # restore the parameters the user changed
+        for di, d in enumerate(devs):
+            lines.extend(_emit_param_restore(var, di, d.get("name") or "", d.get("params") or []))
 
     clips = t.get("clips") or []
     for ci, c in enumerate(clips):
