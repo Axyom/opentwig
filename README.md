@@ -7,8 +7,8 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](#install)
 
 Goes where Bitwig's official Controller API can't: build arrangements, devices,
-modulators, sidechains, automation, and full multi-track songs from a Python
-program, then render to `.wav`.
+sidechains, automation, and full multi-track songs from a Python program, then
+render to `.wav`.
 
 Free and open source (GPL-3.0). Windows only. Early beta.
 

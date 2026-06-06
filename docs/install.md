@@ -39,7 +39,7 @@ python -m openwig doctor
 Expected output:
 
 ```
-openwig 0.1.0 (supports Bitwig: 6.x)
+openwig 0.1.2 (supports Bitwig: 6.x)
 controller dir : C:\Users\<you>\Documents\Bitwig Studio\Controller Scripts
 controller     : OK
 bridge :7777   : OK (Bitwig 6.0.6) compatible
