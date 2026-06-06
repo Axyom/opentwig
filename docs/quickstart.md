@@ -52,8 +52,7 @@ for beat in range(16):
 bass.automate("volume", duck)
 ```
 
-`automate("volume", points)` writes the breakpoints offline - no routing, no
-extra plugin.
+`automate("volume", points)` writes the breakpoints offline.
 
 ## 5. Master chain and render
 
