@@ -228,10 +228,9 @@ class Track:
             key, st, du, vel = nt[0], nt[1], nt[2], nt[3]
             ch = nt[4] if len(nt) > 4 else 0
             payload_notes.append([int(ch), int(key), float(st), float(du), float(vel)])
-        self.s.b.request("clip.create_arranger_with_notes", {
+        self.s.b.request_op("clip.create_arranger_with_notes", {
             "start": float(start), "duration": float(dur), "notes": payload_notes,
-        })
-        time.sleep(0.5 + 0.005 * len(payload_notes))
+        }, fallback=0.5 + 0.005 * len(payload_notes), floor=0.2, timeout=15.0)
         # remember for later (.mid export, save_json, etc.)
         self._clip_specs.append((float(start), float(dur), [tuple(nt) for nt in notes]))
 

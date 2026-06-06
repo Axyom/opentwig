@@ -44,6 +44,7 @@ var cursorTrack, cursorDevice, remoteControlsPage;
 var masterCursorDevice, masterRemotes, masterDeviceBank;
 var gSerializeB64 = null, gSerializeErr = null;
 var gWalk = null, gWalkErr = null;           // generic descriptor-graph reader result (JSON string)
+var gOpsDone = 0;                            // count of finished document-thread ops (completion signal; see ops.done)
 var gClipNotes = {}, gNoteScroll = 0, gNoteStepSize = 0.25;
 var arranger, cueMarkerBank;
 var arrangerClip, launcherClip, gCursorClip;
@@ -617,6 +618,11 @@ function _runOnDocumentThread(proxy, jsRun) {
     execM.setAccessible(true);
     var task = new (Java.extend(Java.type("java.lang.Runnable")))({ run: function () {
         try { flog("[auto] " + JSON.stringify(jsRun())); } catch (e) { flog("[auto] ERR: " + e); }
+        gOpsDone++;          // signal completion: the op actually finished on the edit thread
+        // PUSH the completion to the client (this runs on the doc thread, same as the op, and
+        // the client waits passively - so no JS runs concurrently on the receive thread, which
+        // would crash GraalJS). The client must NOT poll while an op is in flight.
+        try { sendObj({ jsonrpc: "2.0", method: "op_done", params: { done: gOpsDone } }); } catch (e) {}
     }});
     execM.invoke(proxy, task);
 }
@@ -697,6 +703,10 @@ var HANDLERS = {
 
     // ── meta ──
     "ping": function () { return "pong"; },
+    // Completion counter for async document-thread ops (clip create, automation write, ...).
+    // The SDK reads it before firing an op and polls until it advances - replaces fixed
+    // sleeps with "wait until the op actually finished" (faster + race-free).
+    "ops.done": function () { return { done: gOpsDone }; },
     "hello": function (p) { return { version: 1, num_tracks: NUM_TRACKS, snapshot: snapshot() }; },
     "state.snapshot": function () { return snapshot(); },
     // ── host introspection (Bitwig version handshake) ──

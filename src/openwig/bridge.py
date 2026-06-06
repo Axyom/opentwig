@@ -92,6 +92,13 @@ class BridgeClient:
         # optional callback(method, params) for server-pushed notifications
         self.on_notification = None
 
+        # async-op completion: the controller PUSHES an "op_done" notification when each
+        # document-thread op finishes; request_op waits on this instead of polling (polling
+        # during an op runs JS on two threads at once and crashes GraalJS).
+        self._ops_done = 0
+        self._ops_cv = threading.Condition()
+        self._push_cap = None            # None=unknown, True/False once probed
+
     # ── lifecycle ────────────────────────────────────────────────────────────
 
     def start(self):
@@ -121,6 +128,40 @@ class BridgeClient:
     def wait_connected(self, timeout=None):
         # "ready" = controller handshake received, safe to send
         return self._ready.wait(timeout)
+
+    def _push_capable(self):
+        """Whether the controller pushes op_done notifications. Probed once via the ops.done
+        handler (a plain read, done when no op is in flight - safe). Cached."""
+        if self._push_cap is None:
+            try:
+                self.request("ops.done", timeout=2.0)
+                self._push_cap = True
+            except BridgeError:
+                self._push_cap = False
+        return self._push_cap
+
+    def request_op(self, method, params=None, *, fallback=0.5, floor=0.12, timeout=8.0):
+        """Fire an async document-thread op (clip create, automation write, ...) and block
+        until the controller PUSHES its completion - instead of sleeping a fixed, padded
+        delay. Crucially we do NOT poll while the op runs (that executes JS on a second
+        thread and crashes GraalJS); we wait passively on the pushed `op_done`. Waits exactly
+        as long as the op needs, plus at least `floor` s of breathing room so we don't fire
+        faster than Bitwig's document machinery can absorb. Falls back to sleeping `fallback`
+        on an older controller that doesn't push."""
+        if not self._push_capable():
+            res = self.request(method, params)
+            time.sleep(fallback)
+            return res
+        with self._ops_cv:
+            base = self._ops_done
+        t0 = time.time()
+        res = self.request(method, params)
+        with self._ops_cv:
+            self._ops_cv.wait_for(lambda: self._ops_done > base, timeout=timeout)
+        rest = floor - (time.time() - t0)        # breathing room even if completion was instant
+        if rest > 0:
+            time.sleep(rest)
+        return res
 
     def host_version(self):
         """Return the live Bitwig Studio version string (e.g. ``"6.0.6"``)."""
@@ -218,6 +259,12 @@ class BridgeClient:
             if method == "connected" and isinstance(params, dict):
                 self._last_snapshot = params
                 self._ready.set()
+            if method == "op_done":
+                with self._ops_cv:
+                    n = params.get("done") if isinstance(params, dict) else None
+                    self._ops_done = n if isinstance(n, (int, float)) else self._ops_done + 1
+                    self._push_cap = True
+                    self._ops_cv.notify_all()
             if self.on_notification:
                 try:
                     self.on_notification(method, params)

@@ -20,8 +20,7 @@ def write_offline(bridge, points, *, param: str = "volume", remote_index: int = 
     0.5s before returning so successive calls don't overlap (GraalJS is single-threaded
     so two in-flight writes would collide).
     """
-    res = bridge.request("automation.write_offline",
-                         {"param": param, "remote_index": remote_index,
-                          "points": [list(pt) for pt in points]})
-    time.sleep(0.5)
-    return res
+    return bridge.request_op("automation.write_offline",
+                             {"param": param, "remote_index": remote_index,
+                              "points": [list(pt) for pt in points]},
+                             fallback=0.5, floor=0.15, timeout=10.0)

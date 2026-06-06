@@ -41,6 +41,10 @@ class FakeBridge:
             return []
         return {}
 
+    def request_op(self, method, params=None, **_kw):
+        """Async-op fire+wait collapses to a plain recorded request in tests."""
+        return self.request(method, params)
+
     # --- assertion helpers ---
     def methods(self):
         return [m for m, _ in self.calls]
