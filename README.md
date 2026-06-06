@@ -10,7 +10,7 @@ Goes where Bitwig's official Controller API can't: build arrangements, devices,
 sidechains, automation, and full multi-track songs from a Python program, then
 render to `.wav`.
 
-Free and open source (GPL-3.0). Windows only. Early beta.
+Free and open source (GPL-3.0). Windows only. Early alpha.
 
 **[Documentation →](https://axyom.github.io/openwig/)**
 
