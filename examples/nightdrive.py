@@ -1,9 +1,9 @@
 """Nightdrive - a full demo song.
 
-Composed/edited in Bitwig, read back with `python -m openwig recreate`, then
-hand-simplified: portable factory devices, and the repetitive parts written as
-generators - drum grids, a tiled bass cell, and repeated stab/lead phrases -
-instead of dumping every note. 12 tracks, arranger automation, device chains.
+A 12-track progressive house / techno sketch: drum grids, a tiled bass cell,
+repeated stab and lead phrases, device chains, and arranger automation. The
+repetitive parts are written as generators (pulse / tile / roll) instead of
+note-by-note, with stock factory devices so it runs anywhere.
 
 Run it against a scratch project - it opens with clean=True, which clears the
 currently-open Bitwig project:

@@ -34,29 +34,6 @@ def _cmd_doctor(_args) -> int:
     return _install.doctor()
 
 
-def _cmd_recreate(args) -> int:
-    """Read the open Bitwig project live and emit a Python script that rebuilds it."""
-    from openwig.bridge import BridgeClient
-    from openwig.read import read_project, summarize
-    from openwig.recreate import to_script
-
-    b = BridgeClient(request_timeout=20.0)
-    b.start()
-    if not b.wait_connected(8.0):
-        print("bridge not connected - is Bitwig running with OpenwigBridge?", file=sys.stderr)
-        return 1
-    print("reading the open project (this stops playback and walks each track)...")
-    data = read_project(b, with_clips=not args.no_clips)
-    b.stop()
-    print(summarize(data))
-    label = (args.out.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]).removesuffix(".py")
-    script = to_script(data, project_label=label)
-    with open(args.out, "w", encoding="utf-8") as fh:
-        fh.write(script)
-    print(f"\n-> wrote {args.out}")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="openwig",
@@ -78,11 +55,6 @@ def main(argv: list[str] | None = None) -> int:
 
     p_ver = sub.add_parser("version", help="print SDK version + supported Bitwig versions")
     p_ver.set_defaults(func=_cmd_version)
-
-    p_rec = sub.add_parser("recreate", help="read the open project live and emit a Python script that rebuilds it")
-    p_rec.add_argument("-o", "--out", default="recreated.py", help="output script path (default: recreated.py)")
-    p_rec.add_argument("--no-clips", action="store_true", help="skip notes/automation (structure only, much faster)")
-    p_rec.set_defaults(func=_cmd_recreate)
 
     args = p.parse_args(argv)
     return args.func(args)
