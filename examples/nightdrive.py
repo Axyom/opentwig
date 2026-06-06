@@ -108,7 +108,7 @@ t_08_bass.fader(0.7937)
 t_08_bass.fx('Filter')
 t_08_bass.fx('Filter')
 t_08_bass.select_device(0)
-t_08_bass.set_remote_values(3, {0: 0.4, 5: 0.39, 7: 0.5})   # Filt Freq, FEG D, FEG Amount
+t_08_bass.set_remote_values(3, {0: 0.6, 5: 0.39, 7: 0.5})   # Filt Freq, FEG D, FEG Amount
 t_08_bass.set_remote_values(4, {2: 0.5})   # FEG Amt
 t_08_bass.select_device(1)   # Filter
 t_08_bass.set_remote_values(0, {0: 0, 2: 0.5714})   # Freq, Mode

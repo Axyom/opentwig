@@ -2,11 +2,10 @@
 
 **Algorithmic composition for Bitwig Studio. Write Python, get songs.**
 
-Goes where Bitwig's official Controller API can't: build arrangements, devices,
-modulators, sidechains, automation, and full multi-track songs from a Python
+Goes where Bitwig's official Controller API can't: build arrangements, devices, automation, and full multi-track songs from a Python
 program, then render to `.wav`.
 
-> Free and open source (GPL-3.0). Windows only. Early beta.
+> Free and open source (GPL-3.0). Windows only. Early alpha.
 
 ```python
 from openwig import Song, Note
@@ -29,8 +28,7 @@ print(s.render("song.wav"))
 ## What you can do
 
 - **Build songs** - tracks, clips, devices, mix, master chain.
-- **Modulators + sidechain** - fully programmatic, no GUI dragging.
-- **Automation** - offline.
+- **Automation**
 - **Render** - to `.wav` via WASAPI loopback (Windows).
 
 ## Where to go next
