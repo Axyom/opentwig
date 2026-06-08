@@ -45,6 +45,8 @@ var masterCursorDevice, masterRemotes, masterDeviceBank;
 var gSerializeB64 = null, gSerializeErr = null;
 var gWalk = null, gWalkErr = null;           // generic descriptor-graph reader result (JSON string)
 var gProbe = null, gProbeErr = null;         // resolver self-test report (JSON-able object); see resolver.probe
+var _AUTO_SYM = null;                         // cached structurally-discovered automation symbols
+var gBlindDiscovery = false;                  // test switch: structural discovery only (no name hints, no fallback)
 var gOpsDone = 0;                            // count of finished document-thread ops (completion signal; see ops.done)
 var gClipNotes = {}, gNoteScroll = 0, gNoteStepSize = 0.25;
 var arranger, cueMarkerBank;
@@ -632,16 +634,167 @@ function _runOnDocumentThread(proxy, jsRun) {
     execM.invoke(proxy, task);
 }
 
-// Core arranger-automation insert. MUST be called on the document-edit thread (inside an
-// exec(Runnable)). Unwraps the param proxy to its document fj, builds the a1x identity, and
-// calls the automation_lanes insert by reflection. Extracted so both the public handler and
-// the resolver self-test exercise the SAME path. Returns { inserted, param }.
-function _insertAutomationPoints(byU, paramProxy, which, pts) {
+// ── name-free (structural) discovery of the arranger-automation cluster ─────────
+// The obfuscated names below are stable for one Bitwig build but get re-obfuscated each
+// release. To survive a release, we IDENTIFY the same symbols by SHAPE instead of by name,
+// anchored on the stable public-API objects (a track target + a parameter proxy). This is
+// the headline path ("write arranger automation, which the official API can't"); the other
+// internal paths still use the hardcoded names and are covered by the doctor self-test.
+function _dtype(t) { return "" + t.getName(); }
+// Robust runtime class of a host object. Inside a long reflection loop on the document
+// thread, the JS-side `obj.getClass()` member access intermittently fails with a GraalJS
+// "Message not supported" interop error; invoking Object.getClass() REFLECTIVELY avoids it.
+var _GETCLASS = null;
+function _classOf(o) {
+    if (_GETCLASS == null) { _GETCLASS = Java.type("java.lang.Object").class.getMethod("getClass"); _GETCLASS.setAccessible(true); }
+    return _GETCLASS.invoke(o);
+}
+
+// The breakpoint-insert method has a very specific 8-arg shape:
+//   (valueRef, double time, double value, double curvature, boolean, boolean, Enum interp, Object)
+// Find it on a class hierarchy by that shape alone (no name). Returns {method, avr, interp}.
+function _findInsertShape(cls) {
+    var c = cls;
+    while (c != null) {
+        var ms = c.getDeclaredMethods();
+        for (var i = 0; i < ms.length; i++) {
+            var m = ms[i]; if (m.getParameterCount() !== 8) continue;
+            var p = m.getParameterTypes();
+            if (_dtype(p[1]) !== "double" || _dtype(p[2]) !== "double" || _dtype(p[3]) !== "double") continue;
+            if (_dtype(p[4]) !== "boolean" || _dtype(p[5]) !== "boolean") continue;
+            if (!p[6].isEnum()) continue;
+            if (p[0].isPrimitive() || p[0].isEnum() || p[0].isArray()) continue;
+            m.setAccessible(true);
+            return { method: m, avr: p[0], interp: p[6] };
+        }
+        c = c.getSuperclass();
+    }
+    return null;
+}
+// The value-ref identity factory: a static 1-arg method on the avr class returning an avr.
+// Its single parameter type IS the value base (fj). Returns {factory, fjClass}.
+function _findAvrFactory(avr) {
+    var Mod = Java.type("java.lang.reflect.Modifier");
+    var ms = avr.getDeclaredMethods();
+    for (var i = 0; i < ms.length; i++) {
+        var m = ms[i];
+        if (!Mod.isStatic(m.getModifiers()) || m.getParameterCount() !== 1) continue;
+        if (!avr.isAssignableFrom(m.getReturnType())) continue;
+        var pt = m.getParameterTypes()[0];
+        if (pt.isPrimitive() || pt.isEnum() || pt.isArray()) continue;
+        m.setAccessible(true);
+        return { factory: m, fjClass: pt };
+    }
+    return null;
+}
+// An instance of fjClass reachable from obj (itself, or via one of its no-arg getters).
+function _reachInstance(obj, fjClass) {
+    if (obj == null) return null;
+    if (fjClass.isInstance(obj)) return obj;
+    var c = _classOf(obj);
+    while (c != null) {
+        var ms = c.getDeclaredMethods();
+        for (var i = 0; i < ms.length; i++) {
+            var m = ms[i];
+            if (m.getParameterCount() !== 0) continue;
+            var rt = m.getReturnType(); if (rt.isPrimitive() || rt === java.lang.Void.TYPE) continue;
+            var nm = "" + m.getName();
+            try { var r = _invokeNoArg(obj, nm); if (r != null && fjClass.isInstance(r)) return r; } catch (e) {}
+        }
+        c = c.getSuperclass();
+    }
+    return null;
+}
+// Pick LINEAR/HOLD interpolation constants. The interp enum keeps SEMANTIC constant names
+// ("LINEAR", "HOLD"/"STEP") - not obfuscated symbols - so we match those directly (robust
+// across releases, and legitimate even in blind mode). Falls back to the first constant if
+// names are unrecognized; point insertion is unaffected by interpolation type.
+function _pickInterp(interpEnum) {
+    var consts = interpEnum.getEnumConstants();
+    var LIN = null, HOLD = null;
+    for (var k = 0; k < consts.length; k++) {
+        var nm = ("" + consts[k].name()).toUpperCase();
+        if (nm.indexOf("LIN") === 0) LIN = consts[k];
+        else if (nm.indexOf("HOLD") === 0 || nm.indexOf("STEP") === 0) HOLD = consts[k];
+    }
+    var resolved = (LIN != null && HOLD != null);
+    if (LIN == null) LIN = consts.length ? consts[0] : null;
+    if (HOLD == null) HOLD = LIN;
+    return { LINEAR: LIN, HOLD: HOLD, resolved: resolved };
+}
+// Every no-arg getter on byU whose returned object's concrete class carries the insert
+// shape. The shape is NOT unique (several lane containers match) - only one is the real
+// track automation_lanes, so the caller validates by execution. Getters are invoked BY NAME
+// via _invokeNoArg: invoking the reflected Method object directly returns a lazy GraalJS
+// value that fails ("Message not supported") when forced for some accessors. `accessor` is
+// the method NAME. When not blind, the known accessor name leads.
+function _autoCandidates(byU) {
+    var out = [], seen = {}, c = _classOf(byU);
+    while (c != null) {
+        var ms = c.getDeclaredMethods();
+        for (var i = 0; i < ms.length; i++) {
+            var m = ms[i];
+            if (m.getParameterCount() !== 0) continue;
+            var nm = "" + m.getName(); if (seen[nm]) continue; seen[nm] = 1;
+            var rt = m.getReturnType();
+            if (rt.isPrimitive() || rt === java.lang.Void.TYPE || rt.isArray()) continue;
+            var obj; try { obj = _invokeNoArg(byU, nm); } catch (e) { continue; }
+            if (obj == null) continue;
+            var sh; try { sh = _findInsertShape(_classOf(obj)); } catch (e) { continue; }
+            if (sh) out.push({ accessor: nm, shape: sh, name: nm });
+        }
+        c = c.getSuperclass();
+    }
+    if (!gBlindDiscovery) out.sort(function (a, b) { return (b.name === "zer") - (a.name === "zer"); });
+    return out;
+}
+// Insert points with a resolved symbol set S. Throws if the lane is not a valid target
+// (wrong candidates throw here - that is how the caller tells them apart). Returns count.
+function _doInsert(S, byU, pp, pts) {
+    var al = _invokeNoArg(byU, S.alAccessor);
+    var fjInst = _reachInstance(pp.getDeepestTarget(), S.fjClass);
+    if (fjInst == null) throw "value base (fj) instance not reachable from param";
+    var avr = S.factory.invoke(null, fjInst);
+    var Dbl = Java.type("java.lang.Double"), Bl = Java.type("java.lang.Boolean");
+    var n = 0;
+    for (var i = 0; i < pts.length; i++) {
+        var pt = pts[i];
+        var hasCurv = (pt.length > 2 && pt[2] != null);
+        var curv = hasCurv ? pt[2] : 0.0;
+        var interp = (pt.length > 3 && ("" + pt[3]) === "hold") ? S.HOLD : S.LINEAR;
+        S.insert.invoke(al, avr, Dbl.valueOf(pt[0]), Dbl.valueOf(pt[1]), Dbl.valueOf(curv),
+                        Bl.valueOf(hasCurv), Bl.FALSE, interp, null);
+        n++;
+    }
+    return n;
+}
+// Insert via structurally-discovered symbols (no obfuscated names). Tries each shape-matching
+// candidate and keeps the first whose insert actually succeeds, caching it for the session.
+// Throws if none validate.
+function _insertAutoDiscovered(byU, pp, pts) {
+    if (_AUTO_SYM) return _doInsert(_AUTO_SYM, byU, pp, pts);   // validated this session
+    var cands = _autoCandidates(byU);
+    if (!cands.length) throw "no automation_lanes candidate (insert shape) found";
+    var lastErr = "no candidate validated";
+    for (var ci = 0; ci < cands.length; ci++) {
+        var sh = cands[ci].shape;
+        var fac = _findAvrFactory(sh.avr); if (!fac) { lastErr = "no value-ref factory"; continue; }
+        var ip = _pickInterp(sh.interp);
+        var cand = { alAccessor: cands[ci].accessor, insert: sh.method, avr: sh.avr,
+                     factory: fac.factory, fjClass: fac.fjClass, interp: sh.interp,
+                     LINEAR: ip.LINEAR, HOLD: ip.HOLD, interpResolved: ip.resolved };
+        try { var n = _doInsert(cand, byU, pp, pts); _AUTO_SYM = cand; return n; }   // cache AFTER success
+        catch (e) { lastErr = "" + e; }
+    }
+    throw lastErr;
+}
+// The original hardcoded-name path, kept as a fallback when discovery fails.
+function _insertAutoHardcoded(byU, paramProxy, pts) {
     var al = _invokeNoArg(byU, "zer");                       // automation_lanes (udG)
     var pp = paramProxy();
     var fj = _fjFrom(_invokeNoArg(pp.getDeepestTarget(), "getAtom"));
     if (fj == null) fj = _fjFrom(pp.getDeepestTarget());
-    if (fj == null) throw "could not resolve fj for param '" + which + "'";
+    if (fj == null) throw "could not resolve fj for param";
     var a1x = Java.type("com.bitwig.flt.document.core.master.a1x").r3B(fj);
     var oJk = Java.type("oJk"), LINEAR = oJk.Xzy, HOLD = oJk.r3B;
     var Dbl = Java.type("java.lang.Double"), Bl = Java.type("java.lang.Boolean");
@@ -656,7 +809,24 @@ function _insertAutomationPoints(byU, paramProxy, which, pts) {
                  Bl.valueOf(hasCurv), Bl.FALSE, interp, null);
         n++;
     }
-    return { inserted: n, param: which };
+    return n;
+}
+// Core arranger-automation insert. MUST run on the document-edit thread. Prefers name-free
+// structural discovery; falls back to the hardcoded-name path (unless blind mode forces
+// discovery only). Records how it resolved in the return value. Returns { inserted, param, via }.
+var gAutoVia = "?";
+function _insertAutomationPoints(byU, paramProxy, which, pts) {
+    var pp = paramProxy();
+    try {
+        var n = _insertAutoDiscovered(byU, pp, pts);
+        gAutoVia = "discovered";
+        return { inserted: n, param: which, via: "discovered" };
+    } catch (eDisc) {
+        if (gBlindDiscovery) { gAutoVia = "failed"; throw eDisc; }   // no fallback in blind mode
+        var n2 = _insertAutoHardcoded(byU, paramProxy, pts);
+        gAutoVia = "hardcoded";
+        return { inserted: n2, param: which, via: "hardcoded", disc_error: "" + eDisc };
+    }
 }
 
 function automationWriteOffline(p) {
@@ -791,7 +961,8 @@ function _runResolverProbe() {
     try {
         var r = _insertAutomationPoints(byU, function () { return cursorTrack.volume(); }, "volume",
             [[_SENT_AUTO_T, 0.3], [_SENT_AUTO_T2, 0.7]]);
-        report.capabilities.automation_write.detail = "inserted " + r.inserted;
+        report.capabilities.automation_write.detail = "inserted " + r.inserted + " (" + r.via + ")";
+        report.capabilities.automation_write.via = r.via;
     } catch (e) { report.capabilities.automation_write.detail = "insert failed: " + e; }
 
     // 2. arranger clip + one note
@@ -820,6 +991,20 @@ function _runResolverProbe() {
         report.capabilities.clip_create.detail += noteFound ? " | verified" : " | sentinel NOT found";
     }
 
+    // structurally-discovered automation symbols (for transparency + crowdsourced maps):
+    // these names should match the hardcoded ones on a supported build.
+    if (_AUTO_SYM) {
+        report.discovered = {
+            al_accessor: "" + _AUTO_SYM.alAccessor,
+            insert: "" + _AUTO_SYM.insert.getName(),
+            value_ref: "" + _AUTO_SYM.avr.getName(),
+            factory: "" + _AUTO_SYM.factory.getName(),
+            value_base: "" + _AUTO_SYM.fjClass.getName(),
+            interp_enum: "" + _AUTO_SYM.interp.getName(),
+            interp_resolved: _AUTO_SYM.interpResolved
+        };
+    }
+
     report.ok = report.capabilities.automation_write.ok && report.capabilities.clip_create.ok &&
                 report.capabilities.descriptor_read.ok;
     return report;
@@ -834,11 +1019,18 @@ var HANDLERS = {
     "resolver.classes": function () { return { bitwig: _hostInfo(), classes: _resolverClasses() }; },
     // Full round-trip probe on the document thread; fetch the report with resolver.result.
     // The caller MUST have created + selected a throwaway track first (this writes to it).
+    // params: { blind: bool } - blind forces name-free structural discovery only (no name
+    // hints, no hardcoded fallback), simulating a build where the obfuscated names changed.
     "resolver.probe": function (p) {
         gProbe = null; gProbeErr = null;
+        var blind = !!bget(p, "blind", false);
         _runOnDocumentThread(cursorTrack, function () {
-            try { gProbe = _runResolverProbe(); return { ok: gProbe.ok }; }
+            var prevBlind = gBlindDiscovery;
+            gBlindDiscovery = blind;
+            if (blind) _AUTO_SYM = null;            // force a fresh structural-only resolution
+            try { gProbe = _runResolverProbe(); gProbe.blind = blind; return { ok: gProbe.ok }; }
             catch (e) { gProbeErr = "" + e; return { error: gProbeErr }; }
+            finally { gBlindDiscovery = prevBlind; if (blind) _AUTO_SYM = null; }   // don't leak the blind cache
         });
         return { queued: true, note: "fetch with resolver.result" };
     },

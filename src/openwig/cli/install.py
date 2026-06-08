@@ -111,6 +111,11 @@ def _print_selftest(rep) -> int:
         if not ok:
             rc = max(rc, 3)
 
+    disc = rep.get("discovered")
+    if disc:
+        print(f"  resolved by  : structural discovery "
+              f"(al={disc.get('al_accessor')}, insert={disc.get('insert')}, base={disc.get('value_base')})")
+
     if rep.get("ok"):
         print("  => all reflection paths verified on this Bitwig build")
     else:

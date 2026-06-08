@@ -28,6 +28,18 @@ def _find_track_index(b, name):
     return None
 
 
+def _delete_all_named(b, name, limit=6):
+    """Delete every track named ``name`` (self-heals probe tracks left by a crashed run)."""
+    for _ in range(limit):
+        idx = _find_track_index(b, name)
+        if idx is None:
+            return
+        try:
+            b.request("track.delete", {"index": idx})
+        except BridgeError:
+            return
+
+
 def run_selftest(b=None, *, timeout=15.0):
     """Run the resolver self-test against live Bitwig.
 
@@ -48,6 +60,7 @@ def run_selftest(b=None, *, timeout=15.0):
                 "classes": classes.get("classes"),
                 "bitwig": classes.get("bitwig")}
         try:
+            _delete_all_named(b, PROBE_TRACK)   # clear any probe track left by a prior crash
             b.request("track.create", {"type": "instrument", "name": PROBE_TRACK})
             # wait for the track to appear (createInstrumentTrack + a scheduled rename)
             idx = None
@@ -69,13 +82,8 @@ def run_selftest(b=None, *, timeout=15.0):
                 report["error"] = res["error"]
             return report
         finally:
-            # always remove the probe track, identifying it BY NAME (never index alone)
-            del_idx = _find_track_index(b, PROBE_TRACK)
-            if del_idx is not None:
-                try:
-                    b.request("track.delete", {"index": del_idx})
-                except BridgeError:
-                    pass
+            # always remove the probe track(s), identifying BY NAME (never index alone)
+            _delete_all_named(b, PROBE_TRACK)
     finally:
         if own:
             b.stop()
