@@ -29,6 +29,8 @@ GOOD_REPORT = {
         "automation_write": {"ok": True, "detail": "wrote 2 points", "via": "offline"},
         "clip_create": {"ok": True, "detail": "created clip"},
         "descriptor_read": {"ok": True, "detail": "read back"},
+        "serialize": {"ok": True, "detail": "serialized doc", "via": "WZK"},
+        "normalize": {"ok": True, "detail": "normalized value", "via": "fj"},
     },
     "discovered": {"al_accessor": "aL", "insert": "ins", "value_base": "vB"},
 }
@@ -123,6 +125,8 @@ def test_selftest_happy_path_returns_report_connected():
     assert rep["capabilities"]["automation_write"]["ok"] is True
     assert rep["capabilities"]["clip_create"]["ok"] is True
     assert rep["capabilities"]["descriptor_read"]["ok"] is True
+    assert rep["capabilities"]["serialize"]["ok"] is True
+    assert rep["capabilities"]["normalize"]["ok"] is True
 
 
 def test_selftest_happy_path_creates_and_deletes_probe_track():
@@ -231,15 +235,24 @@ def test_delete_all_named_respects_limit():
 
 # ── _print_selftest ──────────────────────────────────────────────────────────────
 
+# the resolver class-load map: all nine internal classes present on a good build
+_ALL_CLASSES = {
+    "fj": True, "oJk": True, "a1x": True, "X2S": True, "alU": True,
+    "SZo": True, "ZjS": True, "BOg": True, "WZK": True,
+}
+
+
 def _rep_all_ok():
     return {
         "connected": True,
         "ok": True,
-        "classes": {"Foo": True, "Bar": True},
+        "classes": dict(_ALL_CLASSES),
         "capabilities": {
             "automation_write": {"ok": True, "detail": "wrote points"},
             "clip_create": {"ok": True, "detail": "made clip"},
             "descriptor_read": {"ok": True, "detail": "read back"},
+            "serialize": {"ok": True, "detail": "serialized doc"},
+            "normalize": {"ok": True, "detail": "normalized value"},
         },
         "discovered": {"al_accessor": "aL", "insert": "ins", "value_base": "vB"},
     }
@@ -249,12 +262,35 @@ def test_print_selftest_all_ok_returns_zero(capsys):
     rc = _print_selftest(_rep_all_ok())
     out = capsys.readouterr().out
     assert rc == 0
-    assert "2/2 internal classes load" in out
+    assert "9/9 internal classes load" in out
     assert "automation" in out
     assert "clip create" in out
     assert "descriptor" in out
-    assert out.count("OK  ") == 3
+    assert out.count("OK  ") == 5
     assert "all reflection paths verified" in out
+
+
+def test_print_selftest_prints_all_five_capability_lines(capsys):
+    rc = _print_selftest(_rep_all_ok())
+    out = capsys.readouterr().out
+    assert rc == 0
+    # every one of the five capability labels appears on its own printed line
+    for label in ("automation", "clip create", "descriptor", "serialize", "normalize"):
+        assert label in out
+
+
+@pytest.mark.parametrize("cap", ["serialize", "normalize"])
+def test_print_selftest_failed_new_capability_returns_3(capsys, cap):
+    rep = _rep_all_ok()
+    rep["ok"] = False
+    rep["capabilities"][cap] = {"ok": False, "detail": "broke"}
+    rc = _print_selftest(rep)
+    out = capsys.readouterr().out
+    assert rc == 3
+    # the FAIL line is printed for the failing NEW capability, with its detail
+    assert "FAIL" in out
+    assert "broke" in out
+    assert "SOME paths failed" in out
 
 
 def test_print_selftest_failed_capability_returns_3(capsys):
@@ -287,8 +323,13 @@ def test_print_selftest_no_capabilities_returns_3(capsys):
 
 def test_print_selftest_reports_missing_classes(capsys):
     rep = _rep_all_ok()
-    rep["classes"] = {"Foo": True, "Bar": False}
+    # two of the nine internal classes failed to load on this build
+    rep["classes"] = dict(_ALL_CLASSES)
+    rep["classes"]["BOg"] = False
+    rep["classes"]["WZK"] = False
     _print_selftest(rep)
     out = capsys.readouterr().out
-    assert "1/2 internal classes load" in out
-    assert "MISSING: Bar" in out
+    assert "7/9 internal classes load" in out
+    assert "MISSING: " in out
+    assert "BOg" in out
+    assert "WZK" in out
