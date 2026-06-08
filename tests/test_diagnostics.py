@@ -396,3 +396,57 @@ def test_print_selftest_prints_cache_not_written_reason(capsys):
     assert rc == 0
     assert "not written" in out
     assert "read-only filesystem" in out
+
+
+# -- _print_selftest: NEW optional "commands" report field --------------------------
+
+def _commands_block(resolved=True):
+    return {
+        "clipCmd": {"cls": "X2S", "field": "fiU", "factory": "qgm",
+                    "exec": "r3B", "opid": 7350},
+        "noteCmd": {"cls": "alU", "field": "r3B", "factory": "XaN",
+                    "exec": "r3B", "opid": 7349},
+        "resolved": resolved,
+        "instantiated": 12569,
+    }
+
+
+def test_print_selftest_prints_commands_by_opid_when_resolved(capsys):
+    rep = _rep_all_ok()
+    rep["commands"] = _commands_block(resolved=True)
+    rc = _print_selftest(rep)
+    out = capsys.readouterr().out
+    assert rc == 0
+    # the commands line is printed with the "by op-id" tag ...
+    assert "commands" in out
+    assert "by op-id" in out
+    assert "SEED (op-id lookup failed)" not in out
+    # ... and names clip / note as <cls>.<factory>
+    assert "X2S.qgm" in out
+    assert "alU.XaN" in out
+
+
+def test_print_selftest_prints_commands_seed_when_not_resolved(capsys):
+    rep = _rep_all_ok()
+    rep["commands"] = _commands_block(resolved=False)
+    rc = _print_selftest(rep)
+    out = capsys.readouterr().out
+    assert rc == 0
+    # the seed/fallback tag replaces the "by op-id" tag
+    assert "SEED (op-id lookup failed)" in out
+    assert "by op-id" not in out
+    # the clip / note class.factory are still printed
+    assert "X2S.qgm" in out
+    assert "alU.XaN" in out
+
+
+def test_print_selftest_no_commands_key_prints_no_commands_line(capsys):
+    rep = _rep_all_ok()
+    assert "commands" not in rep
+    rc = _print_selftest(rep)
+    out = capsys.readouterr().out
+    assert rc == 0
+    # no commands line is printed and nothing crashes
+    assert "by op-id" not in out
+    assert "SEED (op-id lookup failed)" not in out
+    assert "commands     :" not in out
