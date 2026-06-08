@@ -1284,8 +1284,7 @@ var _RESOLVER_CLASSES = [
     "alU",                                         // clip-create: insert-note command host
     "com.bitwig.ramona.serial.SZo",                // descriptor reader + serialize filter
     "ZjS",                                         // audio-clip / file insert dispatch token
-    "BOg",                                         // sidechain routing component base
-    "com.bitwig.flt.document.core.master.device.WZK" // device automation-target command host
+    "BOg"                                          // sidechain routing component base
 ];
 function _resolverClasses() {
     var out = {};
@@ -2086,7 +2085,7 @@ var HANDLERS = {
     },
 
     // INSERT an audio clip from a .wav file onto the arranger at `start` (beats),
-    // duration `dur` beats. Same playbook as modulator.insert:
+    // duration `dur` beats, via the stable ArrangerClipInsertionPoint:
     //   ArrangerClipInsertionPoint(HrV track, double startTime, double duration,
     //                              FSY=null, clk_2=null)
     //   .r3B(new File(path), ZjS.r3B, null)
@@ -2125,56 +2124,6 @@ var HANDLERS = {
         });
         return { queued: true, path: path, start: start, duration: dur,
                  note: "async; outcome in openwig_bridge.log [auto]" };
-    },
-
-    // INSERT a modulator from a .bwmodulator file path. Discovered via
-    // TestModulatorGrid.java:60-61 -- ModulatorGridInsertionPoint accepts
-    // (peb_0 modulator_grid, int gridX, int gridY, PKE pke=null); then
-    // byi_2.r3B(File, ZjS, hha) (line 130 of byi_2.java) loads the file +
-    // dispatches the insert (hha callback nullable). Bypasses preview-session
-    // orchestration entirely.
-    // p: { path: "C:/.../LFO.bwmodulator", x?: 0, y?: 0 }
-    "modulator.insert": function (p) {
-        var path = "" + bget(p, "path", "");
-        if (!path) return { error: "no path" };
-        var gx = bget(p, "x", 0) | 0;
-        var gy = bget(p, "y", 0) | 0;
-        _runOnDocumentThread(cursorTrack, function () {
-            var byU = cursorDevice.getDeepestTarget();
-            if (byU == null) throw "no cursor device target";
-            // walk to modulator_grid (cxt_2 prop 6727 on device)
-            var descrs = _descriptors(byU.mX_());
-            var mg = null;
-            for (var i = 0; i < descrs.size(); i++) {
-                var d = descrs.get(i);
-                try {
-                    if (("" + _inv0(d, "ngq")) === "6727") {
-                        try { mg = _inv1(d, "uEK", byU); } catch (e) {}
-                        break;
-                    }
-                } catch (e) {}
-            }
-            if (mg == null) throw "modulator_grid not reachable on cursor device";
-
-            // construct ModulatorGridInsertionPoint(peb_0, int, int, PKE=null)
-            var MGIP = Java.type("com.bitwig.flt.document.core.iface.clipboard.modulator.ModulatorGridInsertionPoint");
-            var ctors = MGIP.class.getDeclaredConstructors();
-            var ctor = null;
-            for (var c = 0; c < ctors.length; c++) {
-                if (ctors[c].getParameterCount() === 4) { ctor = ctors[c]; break; }
-            }
-            if (ctor == null) throw "ModulatorGridInsertionPoint 4-arg constructor not found";
-            ctor.setAccessible(true);
-            var Int = Java.type("java.lang.Integer");
-            var mgip = ctor.newInstance(mg, Int.valueOf(gx), Int.valueOf(gy), null);
-
-            // dispatch file insert: byi_2.r3B(File, ZjS, hha=null)
-            var File = Java.type("java.io.File");
-            var ZjS = Java.type("ZjS");
-            var ok = mgip.r3B(new File(path), ZjS.r3B, null);
-            return { dispatched: !!ok, path: path, x: gx, y: gy };
-        });
-        return { queued: true, path: path, note: "async; outcome in openwig_bridge.log [auto]" };
     },
 
     // SIDECHAIN: wire cursorDevice's sidechain input from another track's signal.
@@ -2322,54 +2271,6 @@ var HANDLERS = {
         try { info.can_hold_audio = t.canHoldAudioData().get(); } catch (e) {}
         try { info.can_hold_note  = t.canHoldNoteData().get();  } catch (e) {}
         return info;
-    },
-
-    // p: { source_index: N, dest: "remote"|"volume"|"pan", remote_index: M, amount: -1..1 }
-    "modulator.map": function (p) {
-        var srcIdx = bget(p, "source_index", 0) | 0;
-        var dest = "" + bget(p, "dest", "remote");
-        var amount = Number(bget(p, "amount", 0.5));
-        _runOnDocumentThread(cursorTrack, function () {
-            var byU = cursorDevice.getDeepestTarget();
-            if (byU == null) throw "no cursor device target";
-            // find modulation_sources list (prop 5438) and pick the Nth source
-            var cwo = byU.mX_();
-            var descrs = _descriptors(cwo);
-            var modList = null;
-            for (var i = 0; i < descrs.size(); i++) {
-                var d = descrs.get(i);
-                if (("" + _inv0(d, "ngq")) === "5438") { modList = _relChildren(d, byU); break; }
-            }
-            if (modList == null || modList.size() <= srcIdx) throw "source_index out of range";
-            var src = modList.get(srcIdx);
-
-            // resolve destination to the canonical float-param atom (fj) - the SAME
-            // resolution the automation path uses. Passing the raw target of a remote
-            // control here is a proxy atom the audio engine can't modulate, so the
-            // mapping syncs to the engine malformed and crashes the native host.
-            // _fjFrom() unwraps the proxy down to the real modulatable atom; for
-            // volume/pan the atom already IS an fj, so they are unaffected.
-            var pp;
-            if (dest === "volume") pp = cursorTrack.volume();
-            else if (dest === "pan") pp = cursorTrack.pan();
-            else pp = remoteControlsPage.getParameter(bget(p, "remote_index", 0) | 0);
-            var destAtom = _fjFrom(_invokeNoArg(pp.getDeepestTarget(), "getAtom"));
-            if (destAtom == null) destAtom = _fjFrom(pp.getDeepestTarget());
-            if (destAtom == null) throw "could not resolve target fj for dest '" + dest + "'";
-
-            // build the cxu_2 set_default_modulation_mapping (op 3630, on class 766)
-            // and call its executor: cxu_2.r3B(UO1, List)
-            var WZK = Java.type("com.bitwig.flt.document.core.master.device.WZK");
-            var cmd = WZK.SWC.Mhm();    // returns the cxu_2 (per WZK.java:140)
-            var ArrayList = Java.type("java.util.ArrayList");
-            var Dbl = Java.type("java.lang.Double");
-            var args = new ArrayList();
-            args.add(destAtom);
-            args.add(Dbl.valueOf(amount));
-            cmd.r3B(src, args);
-            return { mapped: true, source_index: srcIdx, dest: dest, amount: amount };
-        });
-        return { queued: true, note: "async; outcome in openwig_bridge.log [auto]" };
     },
 
     "tempo.write_offline": function (p) {
