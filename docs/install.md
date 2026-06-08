@@ -44,10 +44,13 @@ controller dir : C:\Users\<you>\Documents\Bitwig Studio\Controller Scripts
 controller     : OK
 bridge :7777   : OK (Bitwig 6.0.6) compatible
 internals      : self-test on a throwaway track ...
-  classes      : 6/6 internal classes load
+  classes      : 9/9 internal classes load
   automation   : OK
   clip create  : OK
   descriptor   : OK
+  serialize    : OK
+  normalize    : OK
+  cache        : written -> ...\openwig\symbols_cache.json
   => all reflection paths verified on this Bitwig build
 ```
 
@@ -55,6 +58,11 @@ internals      : self-test on a throwaway track ...
 existing tracks untouched) that confirms openwig's reflection paths work on your exact
 Bitwig build. If any line says `FAIL`, that build is unsupported: please
 [open an issue](https://github.com/Axyom/openwig/issues) with the output.
+
+It also resolves Bitwig's obfuscated internal names and writes a small
+`symbols_cache.json` keyed to your exact build; openwig loads it on connect so it
+keeps working across Bitwig updates that re-obfuscate those names. Re-run `doctor`
+after updating Bitwig to refresh the cache.
 
 Then write your [first song](quickstart.md).
 
