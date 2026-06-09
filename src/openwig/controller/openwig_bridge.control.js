@@ -57,7 +57,7 @@ var gBlindDiscovery = false;                  // test switch: structural discove
 // has refreshed the cache. Numeric op-ids in the data are protocol data, not obfuscated names.
 var SYM = { clipCmd: {}, noteCmd: {}, audio: {}, szFilter: {} };
 var ACIP_CLASS = "com.bitwig.flt.document.core.iface.clipboard.clip.ArrangerClipInsertionPoint"; // stable, non-obfuscated
-var gSymSource = "seed";                       // "seed" | "cache" | "discovered"
+var gSymSource = "seed";                       // "seed"|"cache"|"discovered+cached"|"defaults ..."|"UNRESOLVED ..."  (validated iff cache or discovered+cached)
 var gOpsDone = 0;                            // count of finished document-thread ops (completion signal; see ops.done)
 var gClipNotes = {}, gNoteScroll = 0, gNoteStepSize = 0.25;
 var arranger, cueMarkerBank;
@@ -411,6 +411,21 @@ function sendObj(obj) {
     gConnection.send(bytes);
 }
 
+// doctor is MANDATORY: until the symbol mapping has been VALIDATED for this exact Bitwig
+// build, refuse every internals-dependent op. The mapping is validated when a matching
+// per-build cache exists (loaded at init) or when doctor validated + cached it this session.
+// The only methods allowed before that are the ones `openwig doctor` itself needs to probe
+// and validate the build, plus basic connectivity - so doctor can break the chicken-and-egg.
+function _symbolsValidated() { return gSymSource === "cache" || gSymSource === "discovered+cached"; }
+var _DOCTOR_METHODS = {
+    "ping": true, "hello": true, "ops.done": true, "host.version": true, "state.snapshot": true,
+    "track.create": true, "track.select": true, "track.delete": true,
+    "obj.walk": true, "obj.walk_result": true, "track.insert_audio_clip": true
+};
+function _gateAllows(method) {
+    return _symbolsValidated() || method.indexOf("resolver.") === 0 || _DOCTOR_METHODS[method] === true;
+}
+
 function handleLine(line) {
     var msg;
     try { msg = JSON.parse(line); }
@@ -425,6 +440,13 @@ function handleLine(line) {
     if (!fn) {
         log("unknown method: " + method);
         if (id !== null) sendObj({ jsonrpc: "2.0", id: id, error: { code: -32601, message: "unknown method: " + method } });
+        return;
+    }
+    if (!_gateAllows(method)) {
+        log("BLOCKED (symbols not validated; run doctor): " + method);
+        if (id !== null) sendObj({ jsonrpc: "2.0", id: id, error: { code: -32002,
+            message: "openwig: symbols are not validated for this Bitwig build (" + gSymSource +
+                     "). Run `openwig doctor` to resolve + cache them, then retry." } });
         return;
     }
     try {

@@ -14,11 +14,27 @@ state.snapshot until a NEW occupied slot appears, select it, run the probe, then
 finally delete every slot that appeared (covers a failed post-create rename), highest index
 first so earlier indices stay valid.
 """
+import os
+import struct
+import tempfile
 import time
+import wave
+from pathlib import Path
 
 import pytest
 
 PROBE_TRACK = "__openwig_probe_test__"
+
+
+def _write_silent_wav(path, seconds=0.1):
+    """Write a tiny silent mono WAV (mirrors diagnostics._write_silent_wav)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    n = int(44100 * seconds)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(44100)
+        w.writeframes(struct.pack("<" + "h" * n, *([0] * n)))
 
 
 def _occupied(b):
@@ -141,6 +157,41 @@ def test_probe_blind_discovers_structurally(live_bridge):
         cache = report.get("cache")
         assert cache is not None, "blind probe report missing cache block"
         assert cache.get("written") is False, f"blind probe must not cache: {cache}"
+    finally:
+        _cleanup_probe_tracks(b, before)
+
+
+def test_audio_clip_insert_resolves_and_reads_back(live_bridge):
+    """Arranger audio-clip insert resolves structurally and the file lands in the document.
+
+    Audio insert is resolved structurally (ACIP) except the track-as-HrV accessor, which comes
+    from data/cache. This drives the same path doctor validates: write a uniquely-named silent
+    wav, insert it on a throwaway track, wait for the (async, off-thread) decode, then assert the
+    descriptor walk surfaces the file name. A normal probe runs first so symbols are validated
+    (doctor is mandatory; the gate would otherwise refuse non-diagnostic ops).
+    """
+    b = live_bridge
+    idx, before = _make_probe_track(b)
+    try:
+        # validate symbols for this build (opens the gate; mirrors `openwig doctor`)
+        b.request_op("resolver.probe", {"blind": False}, timeout=90)
+        assert (b.request("resolver.result", timeout=10).get("report") or {}).get("ok") is True
+
+        marker = "owtest_audio_%d" % os.getpid()
+        wavp = Path(tempfile.gettempdir()) / (marker + ".wav")
+        _write_silent_wav(wavp)
+        try:
+            b.request("track.insert_audio_clip", {"track": idx, "path": str(wavp)})
+            time.sleep(2.5)  # decode is async / off-thread
+
+            b.request_op("obj.walk", {"max_depth": 16, "max_nodes": 9000}, timeout=15)
+            walk = b.request("obj.walk_result", timeout=10).get("json") or ""
+            assert marker in walk, "inserted audio file did not surface in the descriptor walk"
+        finally:
+            try:
+                wavp.unlink()
+            except OSError:
+                pass
     finally:
         _cleanup_probe_tracks(b, before)
 

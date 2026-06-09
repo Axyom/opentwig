@@ -93,6 +93,9 @@ def install_controller(*, force: bool = False, dry_run: bool = False) -> int:
         print("[openwig] Bitwig will auto-reload the controller in a few seconds.")
     else:
         print("[openwig] next: Bitwig Studio -> Settings -> Controllers -> openwig -> Add -> OpenwigBridge")
+    # doctor is mandatory: the bridge refuses all ops until the symbols are validated + cached
+    # for this exact Bitwig build. This must be run once per build (re-run after a Bitwig update).
+    print("[openwig] REQUIRED: run `openwig doctor` once to validate + cache symbols for this build.")
     return 0
 
 

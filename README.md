@@ -53,7 +53,7 @@ pip install openwig
 python -m openwig install   # copies the controller into Bitwig's user dir
 ```
 
-Then in Bitwig: **Settings → Controllers → openwig → Add → OpenwigBridge** (one time), and verify with `python -m openwig doctor`.
+Then in Bitwig: **Settings → Controllers → openwig → Add → OpenwigBridge** (one time), and run `python -m openwig doctor` (**required**: validates + caches the obfuscated symbols for your exact build; openwig refuses to run until it has, and you re-run it after a Bitwig update).
 
 Full guide (requirements, troubleshooting, uninstall): **[Install docs →](https://axyom.github.io/openwig/install/)**
 

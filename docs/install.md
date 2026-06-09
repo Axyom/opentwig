@@ -30,11 +30,18 @@ scripts directory (`%USERPROFILE%\Documents\Bitwig Studio\Controller Scripts\`).
 2. **Settings -> Controllers -> openwig -> Add -> OpenwigBridge**.
 3. One-time. Bitwig remembers it across launches.
 
-## 4. Verify
+## 4. Validate (required)
 
 ```bash
 python -m openwig doctor
 ```
+
+!!! warning "doctor is mandatory"
+    openwig refuses every operation until `doctor` has validated and cached the
+    obfuscated symbols for your exact Bitwig build. Run it once after installing,
+    and again after any Bitwig update (the cache is keyed to the build). Until then
+    the bridge replies to normal calls with "symbols are not validated for this
+    Bitwig build. Run `openwig doctor`."
 
 Expected output:
 
