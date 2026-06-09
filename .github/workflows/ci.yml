@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # PyAudioWPatch is win32-only (marker excludes it on linux), so this installs
+      # cleanly here. Live tests auto-skip because OPENWIG_LIVE is unset.
+      - name: Install package + dev deps
+        run: pip install -e .[dev]
+      - name: Run tests
+        run: pytest
+
+  controller-syntax:
+    name: controller syntax (node --check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check controller JavaScript
+        run: node --check src/openwig/controller/openwig_bridge.control.js

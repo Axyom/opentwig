@@ -66,6 +66,26 @@ after updating Bitwig to refresh the cache.
 
 Then write your [first song](quickstart.md).
 
+## Running the tests
+
+Unit tests need no Bitwig and run anywhere:
+
+```bash
+pip install -e .[dev]
+pytest
+```
+
+The live auto-adaptability tests drive a real Bitwig (they create and delete a throwaway
+probe track to verify the resolver against your actual build). They require Bitwig running
+with the OpenwigBridge controller enabled and are opt-in:
+
+```bash
+OPENWIG_LIVE=1 pytest -m live
+```
+
+Without `OPENWIG_LIVE=1` the live tests are skipped, so a plain `pytest` (and CI) never
+touches a running Bitwig.
+
 ## Uninstall
 
 ```bash
