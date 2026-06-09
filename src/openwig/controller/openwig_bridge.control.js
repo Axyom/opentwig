@@ -50,23 +50,13 @@ var gBlindDiscovery = false;                  // test switch: structural discove
 // Central obfuscated-symbol table. Defaults are the seed (current-build) names; doctor
 // resolves + validates them and writes a cache, which init loads to overwrite these. The
 // reflection sites read names from here so a re-obfuscated build keeps working once cached.
-var SYM = {
-    // descriptor reader (discovered structurally)
-    mX_: "mX_", KRt: "KRt", bf: "bf", ngq: "ngq", nI_: "nI_", Xzy: "Xzy", uEK: "uEK",
-    // automation value base (discovered from the automation factory signature; seed bootstraps _fjFrom)
-    fj: "fj",
-    // serializer class (leaf obfuscated; package stable)
-    SZo: "com.bitwig.ramona.serial.SZo",
-    // command hosts, resolved by stable op-id (clip create = 7350, note insert = 7349).
-    // Each: Java.type(cls).<field>.<factory>().<exec>(target, argsList). Defaults are seeds.
-    clipCmd: { cls: "X2S", field: "fiU", factory: "qgm", exec: "r3B", opid: 7350 },
-    noteCmd: { cls: "alU", field: "r3B", factory: "XaN", exec: "r3B", opid: 7349 },
-    // arranger audio-clip insert. ArrangerClipInsertionPoint (ACIP) is a STABLE class; the
-    // dispatch method, ZjS mode class + its self-typed mode field resolve structurally; the
-    // track-as-HrV accessor (hrv) is validated by execution (doctor inserts a test wav).
-    audio: { hrv: "TD", dispatch: "r3B", zjs: "ZjS", modeField: "r3B" }
-};
-var ACIP_CLASS = "com.bitwig.flt.document.core.iface.clipboard.clip.ArrangerClipInsertionPoint"; // stable
+// Resolved obfuscated-symbol table. NO obfuscated names are hardcoded here: it is populated
+// at init from the bootstrap DATA file (symbols_default.json, shipped + installed next to the
+// cache) and then overwritten per-build by doctor's validated cache (symbols_cache.json).
+// Reflection sites read names from here, so a re-obfuscated build keeps working once doctor
+// has refreshed the cache. Numeric op-ids in the data are protocol data, not obfuscated names.
+var SYM = { clipCmd: {}, noteCmd: {}, audio: {}, szFilter: {} };
+var ACIP_CLASS = "com.bitwig.flt.document.core.iface.clipboard.clip.ArrangerClipInsertionPoint"; // stable, non-obfuscated
 var gSymSource = "seed";                       // "seed" | "cache" | "discovered"
 var gOpsDone = 0;                            // count of finished document-thread ops (completion signal; see ops.done)
 var gClipNotes = {}, gNoteScroll = 0, gNoteStepSize = 0.25;
@@ -206,7 +196,7 @@ function init() {
         }
     } catch (e) { host.errorln("noteStepObserver setup: " + e); }
 
-    _loadSymbolCache();          // overwrite SYM reader names from a validated, build-matched cache
+    _loadSymbols();              // load obfuscated-name mapping from the data file + per-build cache
     flog("symbol source: " + gSymSource + "  (fingerprint " + _fingerprint() + ")");
 
     buildState();
@@ -571,146 +561,19 @@ function _inv1(obj, name, a) {                      // cached reflected 1-arg ca
     var m = _findMethod(obj.getClass(), name, 1, null);
     return (m == null) ? null : m.invoke(obj, a);
 }
-var _SZUEK = null;
-function _szPass(d, uo1) {                          // Bitwig's own serialize filter (uEK mode)
-    if (_SZUEK == null) _SZUEK = Java.type(SYM.SZo).uEK;
-    var m = _findMethod(_classOf(_SZUEK), "r3B", 2, "cxz_2");
+// Bitwig's own serialize filter: the reader includes a descriptor only if it passes. The
+// filter singleton (a static SZo field) + its (descriptor, parent)->boolean method come from
+// SYM.szFilter (data / cache). Falls back to "include all" (nI_ still gates) if unresolved.
+var _SZFILT = null;
+function _szPass(d, uo1) {
+    if (_SZFILT === null) {
+        try { var f = Java.type(SYM.SZo).class.getDeclaredField(SYM.szFilter.field); f.setAccessible(true); _SZFILT = f.get(null); }
+        catch (e) { _SZFILT = false; }
+    }
+    if (!_SZFILT) return true;
+    var m = _findMethod(_classOf(_SZFILT), SYM.szFilter.method, 2, SYM.szFilter.param);
     if (m == null) return true;
-    return !!m.invoke(_SZUEK, d, uo1);
-}
-function _descriptors(cwo) {
-    return _inv0(cwo, SYM.KRt);        // java.util.List<cxz_2>
-}
-// uo1.mX_() -> descriptor container, routed through the resolved name.
-function _mx(uo1) { return _invokeNoArg(uo1, SYM.mX_); }
-var _MCACHE = {};
-function _findMethod(cls, name, pcount, p1simple) {
-    var key = cls.getName() + "#" + name + "/" + pcount + "/" + (p1simple || "");
-    if (_MCACHE[key] !== undefined) return _MCACHE[key];
-    var c = cls, found = null;
-    while (c != null && found == null) {
-        var ms = c.getDeclaredMethods();
-        for (var i = 0; i < ms.length; i++) {
-            var m = ms[i];
-            if (("" + m.getName()) !== name || m.getParameterCount() !== pcount) continue;
-            if (p1simple) { var pt = m.getParameterTypes(); if (("" + pt[1].getSimpleName()) !== p1simple) continue; }
-            m.setAccessible(true); found = m; break;
-        }
-        c = c.getSuperclass();
-    }
-    _MCACHE[key] = found; return found;
-}
-function _inv0(obj, name) {                         // cached reflected no-arg call
-    var m = _findMethod(obj.getClass(), name, 0, null);
-    return (m == null) ? null : m.invoke(obj);
-}
-function _inv1(obj, name, a) {                      // cached reflected 1-arg call
-    var m = _findMethod(obj.getClass(), name, 1, null);
-    return (m == null) ? null : m.invoke(obj, a);
-}
-var _SZFILTER = null, _SZMETHOD = null, _SZRESOLVED = false;
-// Resolve Bitwig's serialize filter structurally from the SZo class: a static field holding
-// an SZo filter singleton + its (descriptor, parent)->boolean method. SZo has several filter
-// modes; the reader needs the SERIALIZE filter (the most inclusive), so among the candidates
-// that accept the descriptor + parent types we pick the one that passes the MOST descriptors
-// in a sample. No obfuscated member names. Falls back to "include all" if unresolved.
-function _resolveSzFilter(uo1) {
-    _SZRESOLVED = true;
-    try {
-        var cwo = _mx(uo1), descs = _descriptors(cwo);
-        if (descs == null || descs.size() === 0) { _SZRESOLVED = false; return; }
-        var n = descs.size(), lim = Math.min(n, 60);
-        var dCls = _classOf(descs.get(0)), uCls = _classOf(uo1);
-        var SZo = Java.type(SYM.SZo).class, Mod = Java.type("java.lang.reflect.Modifier");
-        var fs = SZo.getDeclaredFields(), bestM = null, bestI = null, bestPass = -1;
-        for (var i = 0; i < fs.length; i++) {
-            if (!Mod.isStatic(fs[i].getModifiers()) || !SZo.isAssignableFrom(fs[i].getType())) continue;
-            var inst; try { fs[i].setAccessible(true); inst = fs[i].get(null); } catch (e) { continue; }
-            if (inst == null) continue;
-            var c = _classOf(inst), seen = {};
-            while (c != null) {
-                var ms = c.getDeclaredMethods();
-                for (var j = 0; j < ms.length; j++) {
-                    var m = ms[j], mn = "" + m.getName(); if (seen[mn]) continue; seen[mn] = 1;
-                    if (m.getParameterCount() !== 2 || ("" + m.getReturnType().getName()) !== "boolean") continue;
-                    var ps = m.getParameterTypes();
-                    if (!ps[0].isAssignableFrom(dCls) || !ps[1].isAssignableFrom(uCls)) continue;
-                    m.setAccessible(true);
-                    var pass = 0;
-                    for (var k = 0; k < lim; k++) { try { if (m.invoke(inst, descs.get(k), uo1)) pass++; } catch (e) {} }
-                    if (pass > bestPass) { bestPass = pass; bestM = m; bestI = inst; }
-                }
-                c = c.getSuperclass();
-            }
-        }
-        _SZMETHOD = bestM; _SZFILTER = bestI;
-    } catch (e) {}
-}
-function _szPass(d, uo1) { return true; }  // TEMP: nI_-only
-function _descriptors(cwo) {
-    return _inv0(cwo, SYM.KRt);        // java.util.List<cxz_2>
-}
-// uo1.mX_() -> descriptor container, routed through the resolved name.
-function _mx(uo1) { return _invokeNoArg(uo1, SYM.mX_); }
-var _MCACHE = {};
-function _findMethod(cls, name, pcount, p1simple) {
-    var key = cls.getName() + "#" + name + "/" + pcount + "/" + (p1simple || "");
-    if (_MCACHE[key] !== undefined) return _MCACHE[key];
-    var c = cls, found = null;
-    while (c != null && found == null) {
-        var ms = c.getDeclaredMethods();
-        for (var i = 0; i < ms.length; i++) {
-            var m = ms[i];
-            if (("" + m.getName()) !== name || m.getParameterCount() !== pcount) continue;
-            if (p1simple) { var pt = m.getParameterTypes(); if (("" + pt[1].getSimpleName()) !== p1simple) continue; }
-            m.setAccessible(true); found = m; break;
-        }
-        c = c.getSuperclass();
-    }
-    _MCACHE[key] = found; return found;
-}
-function _inv0(obj, name) {                         // cached reflected no-arg call
-    var m = _findMethod(obj.getClass(), name, 0, null);
-    return (m == null) ? null : m.invoke(obj);
-}
-function _inv1(obj, name, a) {                      // cached reflected 1-arg call
-    var m = _findMethod(obj.getClass(), name, 1, null);
-    return (m == null) ? null : m.invoke(obj, a);
-}
-var _SZFILTER = null, _SZMETHOD = null, _SZRESOLVED = false;
-// Resolve Bitwig's serialize filter structurally from the SZo class: a static field holding
-// an SZo instance (a filter singleton) plus its (descriptor, parent)->boolean method. The
-// descriptor class + parent are the discriminators (param[0] accepts the descriptor, param[1]
-// accepts the parent), which picks the RIGHT filter among the SZo modes. No obfuscated member
-// names. Falls back to "include everything" if it cannot be resolved.
-function _resolveSzFilter(descriptor, uo1) {
-    _SZRESOLVED = true;
-    try {
-        var dCls = _classOf(descriptor), uCls = _classOf(uo1);
-        var SZo = Java.type(SYM.SZo).class, Mod = Java.type("java.lang.reflect.Modifier");
-        var fs = SZo.getDeclaredFields();
-        for (var i = 0; i < fs.length; i++) {
-            if (!Mod.isStatic(fs[i].getModifiers()) || !SZo.isAssignableFrom(fs[i].getType())) continue;
-            try { fs[i].setAccessible(true); var inst = fs[i].get(null); if (inst == null) continue; } catch (e) { continue; }
-            var c = _classOf(inst);
-            while (c != null) {
-                var ms = c.getDeclaredMethods();
-                for (var j = 0; j < ms.length; j++) {
-                    var m = ms[j]; if (m.getParameterCount() !== 2) continue;
-                    if (("" + m.getReturnType().getName()) !== "boolean") continue;
-                    var ps = m.getParameterTypes();
-                    if (!ps[0].isAssignableFrom(dCls) || !ps[1].isAssignableFrom(uCls)) continue;
-                    m.setAccessible(true); _SZFILTER = inst; _SZMETHOD = m; return;
-                }
-                c = c.getSuperclass();
-            }
-        }
-    } catch (e) {}
-}
-function _szPass(d, uo1) {                          // Bitwig's own serialize filter
-    if (!_SZRESOLVED) _resolveSzFilter(d, uo1);
-    if (_SZMETHOD == null) return true;            // unresolved -> include all (nI_ still gates)
-    try { return !!_SZMETHOD.invoke(_SZFILTER, d, uo1); } catch (e) { return true; }
+    try { return !!m.invoke(_SZFILT, d, uo1); } catch (e) { return true; }
 }
 function _relChildren(d, uo1) {                     // null if d is not a relationship
     var m = _findMethod(_classOf(d), SYM.uEK, 2, "String");
@@ -1017,7 +880,8 @@ function _autoCandidates(byU) {
         }
         c = c.getSuperclass();
     }
-    if (!gBlindDiscovery) out.sort(function (a, b) { return (b.name === "zer") - (a.name === "zer"); });
+    var hint = SYM.autoLanes;   // known-good lanes accessor (from data); try it first, not blind
+    if (!gBlindDiscovery && hint) out.sort(function (a, b) { return (b.name === hint) - (a.name === hint); });
     return out;
 }
 // Insert points with a resolved symbol set S. Throws if the lane is not a valid target
@@ -1332,22 +1196,16 @@ function _selectNgq(cwo, KRt, ngqOpts) {
     }
     return best;
 }
-// Discover + VALIDATE the reader: pick the candidate whose walk surfaces a known sentinel.
-// Returns { mX_, KRt, bf, ngq, nI_, Xzy, uEK } or null. `sentinels` = substrings to look for.
-function _discoverReader(uo1, sentinels) {
-    // seed (known) names first -> resolves the CANONICAL reader exactly on a supported build.
-    // Skipped in blind mode, which forces the pure structural path (for testing other builds).
-    if (!gBlindDiscovery) {
-        var seedSink = [], seedBud = { n: 9000 };
-        try { _walkWith(uo1, { mX_: "mX_", KRt: "KRt", uEK: "uEK" }, "Xzy", 0, 16, seedBud, seedSink, {}); } catch (e) {}
-        var seedBlob = seedSink.join(""), seedHit = false;
-        for (var ss = 0; ss < sentinels.length; ss++) if (seedBlob.indexOf(sentinels[ss]) >= 0) { seedHit = true; break; }
-        if (seedHit) {
-            var scwo; try { scwo = _invokeNoArg(uo1, "mX_"); } catch (e) { scwo = null; }
-            return { mX_: "mX_", KRt: "KRt", bf: "bf", ngq: scwo ? _selectNgq(scwo, "KRt", ["ngq"]) : "ngq", nI_: "nI_", Xzy: "Xzy", uEK: "uEK" };
-        }
+// Resolve the reader. Without `forceStructural`: TRUST the SYM mapping (loaded from the
+// validated cache or the shipped data file) - it is the canonical reader on a supported build,
+// and the caller validates it via the descriptor-read sentinel check (re-resolving structurally
+// only if that fails). With forceStructural (or blind mode): pure structural discovery, picking
+// the candidate whose walk surfaces the most sentinels. Returns the reader name-set or null.
+function _discoverReader(uo1, sentinels, forceStructural) {
+    if (!forceStructural && !gBlindDiscovery && SYM.mX_ && SYM.KRt && SYM.uEK && SYM.Xzy) {
+        return { mX_: SYM.mX_, KRt: SYM.KRt, bf: SYM.bf, ngq: SYM.ngq, nI_: SYM.nI_, Xzy: SYM.Xzy, uEK: SYM.uEK };
     }
-    // otherwise (blind, or a build where the seed names changed): among the structural
+    // structural (blind, no mapping, or the trusted mapping failed validation): among the
     // candidates whose walk surfaces a sentinel, pick the RICHEST (most scalars). The richest
     // walk is the most COMPLETE reader (reaches notes + automation), matching the canonical
     // reader instead of a partial alias.
@@ -1395,15 +1253,8 @@ function _writeCache(obj) {
         return true;
     } catch (e) { flog("symbol cache write failed: " + e); return false; }
 }
-function _readCache() {
-    try {
-        var F = Java.type("java.io.File"), f = new F(_cachePath());
-        if (!f.exists()) return null;
-        var bytes = Java.type("java.nio.file.Files").readAllBytes(f.toPath());
-        return JSON.parse("" + new JString(bytes, Charset.UTF_8));
-    } catch (e) { flog("symbol cache read failed: " + e); return null; }
-}
-// Apply a validated reader name-set into SYM (called from cache load and from the probe).
+function _readCache() { return _readJson(_cachePath()); }
+// Apply a validated reader name-set into SYM (called from a mapping and from the probe).
 function _applyReaderNames(rd) {
     if (!rd) return;
     if (rd.mX_) SYM.mX_ = rd.mX_; if (rd.KRt) SYM.KRt = rd.KRt; if (rd.bf) SYM.bf = rd.bf;
@@ -1415,18 +1266,41 @@ function _applyCommandSpec(target, spec) {
     if (!spec || !spec.cls) return;
     target.cls = spec.cls; target.field = spec.field; target.factory = spec.factory; target.exec = spec.exec;
 }
-// init-time load: trust the cache only if its fingerprint matches THIS build.
-function _loadSymbolCache() {
+// Merge a symbol mapping (from the bootstrap data file OR the per-build cache) into SYM.
+function _applyMapping(d) {
+    if (!d) return;
+    _applyReaderNames(d.reader);
+    if (d.fj) SYM.fj = d.fj;
+    if (d.SZo) SYM.SZo = d.SZo;
+    if (d.autoLanes) SYM.autoLanes = d.autoLanes;
+    if (d.szFilter) SYM.szFilter = d.szFilter;
+    if (d.clipCmd) _applyCommandSpec(SYM.clipCmd, d.clipCmd), (SYM.clipCmd.opid = d.clipCmd.opid);
+    if (d.noteCmd) _applyCommandSpec(SYM.noteCmd, d.noteCmd), (SYM.noteCmd.opid = d.noteCmd.opid);
+    if (d.audio && d.audio.hrv) SYM.audio = d.audio;
+}
+function _readJson(path) {
+    try {
+        var F = Java.type("java.io.File"), f = new F(path);
+        if (!f.exists()) return null;
+        var bytes = Java.type("java.nio.file.Files").readAllBytes(f.toPath());
+        return JSON.parse("" + new JString(bytes, Charset.UTF_8));
+    } catch (e) { flog("read json failed (" + path + "): " + e); return null; }
+}
+function _defaultsPath() { return ("" + LOG_FILE).replace(/openwig_bridge\.log$/, "symbols_default.json"); }
+// init-time: load the bootstrap DATA mapping, then override with doctor's per-build cache
+// (only when its fingerprint matches THIS build). No obfuscated names live in code.
+function _loadSymbols() {
+    var hadDefaults = false;
+    var d = _readJson(_defaultsPath());
+    if (d) { _applyMapping(d); hadDefaults = true; }
     var c = _readCache();
     if (c && c.fingerprint === _fingerprint() && c.reader) {
-        _applyReaderNames(c.reader);
-        if (c.SZo) SYM.SZo = c.SZo;
-        if (c.clipCmd) _applyCommandSpec(SYM.clipCmd, c.clipCmd);
-        if (c.noteCmd) _applyCommandSpec(SYM.noteCmd, c.noteCmd);
-        if (c.audio && c.audio.hrv) SYM.audio = c.audio;
+        _applyMapping(c);
         gSymSource = "cache";
+    } else if (hadDefaults) {
+        gSymSource = c ? "defaults (cache stale; re-run doctor)" : "defaults (run doctor to validate + cache)";
     } else {
-        gSymSource = c ? "seed (cache stale; re-run doctor)" : "seed (no cache; run doctor)";
+        gSymSource = "UNRESOLVED (run openwig install + doctor)";
     }
 }
 
@@ -1467,11 +1341,19 @@ function _resolverClasses() {
 }
 
 // sentinels: distinctive constants we write, then look for in the descriptor-walk JSON.
-// NB: automation TIMES (beat positions) and note start/velocity are stored verbatim, so
-// they are searchable; an automation VALUE is stored in a normalized representation and is
-// NOT searchable - hence we verify the automation write by its distinctive TIME.
+// NB: automation TIMES (beat positions) and the note START are stored as TIMES we can search
+// for; an automation VALUE and a note velocity are stored normalized and are NOT searchable -
+// hence we verify by the distinctive TIME. Bitwig stores these times as 32-bit floats, so the
+// double we write is widened back from float32 (e.g. 1.6180339 -> 1.6180343627929688). We
+// therefore search for the float32 form (Math.fround), trimmed to a stable leading prefix, so
+// the match survives that rounding instead of depending on the exact decimal we sent.
 var _SENT_AUTO_T = 1.4142135, _SENT_AUTO_T2 = 2.2360679;        // sqrt2, sqrt5 (beat positions)
-var _SENT_NOTE_START = 1.6180339, _SENT_NOTE_VEL = 0.6789, _SENT_NOTE_KEY = 61;
+var _SENT_NOTE_START = 1.6180339, _SENT_NOTE_VEL = 0.6789, _SENT_NOTE_KEY = 61;  // golden ratio
+// float32-safe searchable form: nearest-float32 string, first 7 chars ("N.NNNNN") - distinctive
+// (irrational constants) yet robust to the last-digit rounding the float storage introduces.
+function _sentStr(x) { return ("" + Math.fround(x)).slice(0, 7); }
+var _SENT_AUTO_S = _sentStr(_SENT_AUTO_T), _SENT_AUTO_S2 = _sentStr(_SENT_AUTO_T2);
+var _SENT_NOTE_S = _sentStr(_SENT_NOTE_START);
 
 function _walkTrackJSON(byU) {
     var budget = { n: 9000 };
@@ -1525,43 +1407,49 @@ function _runResolverProbe() {
         report.capabilities.clip_create.detail = "created clip, " + c.notes + " note(s)";
     } catch (e) { report.capabilities.clip_create.detail = "create failed: " + e; }
 
-    // 2.5 discover the descriptor reader now that BOTH the automation point and the clip note
-    //     are written, so it is validated against automation AND notes (a COMPLETE reader, not
-    //     a partial alias). Apply into SYM for the descriptor read below.
+    // 2.5 reader: trust the SYM mapping (validated cache / shipped data); the descriptor read
+    //     below validates it against the automation + note sentinels just written.
+    var SENT = [_SENT_AUTO_S, _SENT_AUTO_S2, _SENT_NOTE_S];
     var rd = null;
-    try { rd = _discoverReader(byU, ["1.414213", "2.236067", "1.618033", "0.6789"]); }
-    catch (e) { report.reader_err = "" + e; }
+    try { rd = _discoverReader(byU, SENT, false); } catch (e) { report.reader_err = "" + e; }
     if (rd) { _applyReaderNames(rd); report.reader = rd; }
 
-    // 3. descriptor read-back + sentinel verification
-    var json = null;
-    try {
-        json = _walkTrackJSON(byU);
-        report.capabilities.descriptor_read.ok = (json != null && json.length > 2);
-        report.capabilities.descriptor_read.detail = "walk " + (json ? json.length : 0) + " chars";
-    } catch (e) { report.capabilities.descriptor_read.detail = "walk failed: " + e; }
-
-    if (json) {
-        var autoFound = json.indexOf("1.414213") >= 0 || json.indexOf("2.236067") >= 0;
+    // 3. descriptor read-back + sentinel verification. If the trusted reader does NOT surface
+    //    both sentinels (a build where the mapping moved), re-resolve the reader STRUCTURALLY
+    //    and walk again. autoFound = automation point; noteFound = clip note.
+    var json = null, autoFound = false, noteFound = false;
+    var walkCheck = function () {
+        try { json = _walkTrackJSON(byU); } catch (e) { json = null; report.capabilities.descriptor_read.detail = "walk failed: " + e; return; }
+        autoFound = json.indexOf(_SENT_AUTO_S) >= 0 || json.indexOf(_SENT_AUTO_S2) >= 0;
+        noteFound = json.indexOf(_SENT_NOTE_S) >= 0;
+    };
+    walkCheck();
+    if (json != null && !(autoFound && noteFound) && !gBlindDiscovery) {
+        var rd2 = null; try { rd2 = _discoverReader(byU, SENT, true); } catch (e) {}
+        if (rd2) { _applyReaderNames(rd2); report.reader = rd2; walkCheck(); }
+    }
+    if (json != null) {
+        report.capabilities.descriptor_read.ok = (json.length > 2);
+        report.capabilities.descriptor_read.detail = "walk " + json.length + " chars";
         if (report.capabilities.automation_write.detail.indexOf("inserted") === 0)
             report.capabilities.automation_write.ok = autoFound;
         report.capabilities.automation_write.detail += autoFound ? " | verified" : " | sentinel NOT found";
-
-        var noteFound = json.indexOf("1.618033") >= 0 || json.indexOf("0.6789") >= 0;
         if (report.capabilities.clip_create.detail.indexOf("created") === 0)
             report.capabilities.clip_create.ok = noteFound;
         report.capabilities.clip_create.detail += noteFound ? " | verified" : " | sentinel NOT found";
     }
 
-    // 4. serialize filter: the SZo serialize filter that the descriptor reader uses to decide
-    //    which properties are serialized. Resolve it structurally (SYM.SZo) and confirm it
-    //    classifies a real descriptor without error.
+    // 4. serialize filter: the SZo filter the descriptor reader uses to decide which properties
+    //    are serialized. Confirm the SZo class loads and the filter (SYM.szFilter) classifies a
+    //    real descriptor (returns a boolean for a true property, false for the dedup sentinel).
     try {
-        var SZo = Java.type(SYM.SZo);                // class must load
-        var bytes = byU.SWC(SZo.uEK);
-        var nb = (bytes == null) ? 0 : bytes.length;
-        report.capabilities.serialize.ok = nb > 0;
-        report.capabilities.serialize.detail = "serialized " + nb + " bytes";
+        Java.type(SYM.SZo);                          // class must load
+        _SZFILT = null;                              // force re-resolve from SYM.szFilter
+        var cwoS = _mx(byU), dl = _descriptors(cwoS);
+        var classified = false;
+        if (dl && dl.size() > 0) { _szPass(dl.get(0), byU); classified = (_SZFILT !== null && _SZFILT !== false); }
+        report.capabilities.serialize.ok = classified;
+        report.capabilities.serialize.detail = classified ? ("filter ok (" + SYM.szFilter.method + ")") : "filter not resolved";
     } catch (e) { report.capabilities.serialize.detail = "failed: " + e; }
 
     // 5. normalize: resolve a parameter's native->0..1 normalize fn (structural, behavioural).
@@ -2172,19 +2060,19 @@ var HANDLERS = {
         var depth = bget(p, "depth", 1) | 0;
         if (gCursorClip == null) return { error: "no cursor clip" };
         try {
-            var cwo = gCursorClip.mX_();
+            var cwo = _mx(gCursorClip);
             if (cwo == null) return { error: "cursor clip has no mX_ target" };
             // shallow walk: just enumerate this object's descriptors (no recursion)
             var descrs = _descriptors(cwo);
             var n = (descrs == null) ? 0 : descrs.size();
             var out = { _cls: (function () {
-                try { return "" + _inv0(cwo, "bf"); } catch (e) { return "?"; }
+                try { return "" + _inv0(cwo, SYM.bf); } catch (e) { return "?"; }
             })(), props: [] };
             for (var i = 0; i < n; i++) {
                 var d = descrs.get(i);
-                var pid; try { pid = "" + _inv0(d, "ngq"); } catch (e) { pid = "i" + i; }
+                var pid; try { pid = "" + _inv0(d, SYM.ngq); } catch (e) { pid = "i" + i; }
                 var val = null;
-                try { val = _jval(_inv1(d, "Xzy", cwo)); } catch (e) { val = "<err>"; }
+                try { val = _jval(_inv1(d, SYM.Xzy, cwo)); } catch (e) { val = "<err>"; }
                 out.props.push({ id: pid, value: val });
             }
             return out;
@@ -2200,18 +2088,18 @@ var HANDLERS = {
         if (gCursorClip == null) return { error: "no cursor clip" };
         _runOnDocumentThread(cursorTrack, function () {
             try {
-                var cwo = gCursorClip.mX_();
+                var cwo = _mx(gCursorClip);
                 if (cwo == null) throw "cursor clip has no mX_ target";
                 var descrs = _descriptors(cwo);
                 var n = (descrs == null) ? 0 : descrs.size();
                 var d = null;
                 for (var i = 0; i < n; i++) {
                     var dd = descrs.get(i);
-                    if (("" + _inv0(dd, "ngq")) === prop) { d = dd; break; }
+                    if (("" + _inv0(dd, SYM.ngq)) === prop) { d = dd; break; }
                 }
                 if (d == null) throw "prop " + prop + " not on cursor clip";
                 // Try the standard setter: uEK(uo1, value)
-                var m = _findMethod(d.getClass(), "uEK", 2, null);
+                var m = _findMethod(_classOf(d), SYM.uEK, 2, null);
                 if (m == null) throw "no setter on prop " + prop;
                 m.invoke(d, cwo, val);
                 return { ok: true, prop_id: prop, value: val };

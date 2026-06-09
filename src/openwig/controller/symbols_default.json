@@ -1,0 +1,12 @@
+{
+  "_comment": "Bootstrap obfuscated-symbol mapping for Bitwig (current supported build). This is DATA, not code: openwig install copies it next to the cache/log, the controller loads it at init, and openwig doctor overrides it per-build by writing symbols_cache.json. Update this when targeting a new Bitwig build, or let doctor re-resolve it.",
+  "schema": 3,
+  "reader": { "mX_": "mX_", "KRt": "KRt", "bf": "bf", "ngq": "ngq", "nI_": "nI_", "Xzy": "Xzy", "uEK": "uEK" },
+  "fj": "fj",
+  "SZo": "com.bitwig.ramona.serial.SZo",
+  "autoLanes": "zer",
+  "szFilter": { "field": "uEK", "method": "r3B", "param": "cxz_2" },
+  "clipCmd": { "cls": "X2S", "field": "fiU", "factory": "qgm", "exec": "r3B", "opid": 7350 },
+  "noteCmd": { "cls": "alU", "field": "r3B", "factory": "XaN", "exec": "r3B", "opid": 7349 },
+  "audio": { "hrv": "TD", "dispatch": "r3B", "zjs": "ZjS", "modeField": "r3B" }
+}

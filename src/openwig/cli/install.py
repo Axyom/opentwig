@@ -17,6 +17,20 @@ from importlib.resources import as_file, files
 from pathlib import Path
 
 CONTROLLER_FILENAME = "openwig_bridge.control.js"
+DEFAULTS_FILENAME = "symbols_default.json"  # bootstrap obfuscated-symbol mapping (DATA)
+
+
+def _data_dir() -> Path:
+    """openwig data dir where the controller reads the defaults + writes the cache/log.
+    Must match _resolveLogPath() in the controller."""
+    import os
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(base) / "openwig"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Logs" / "openwig"
+    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(base) / "openwig"
 
 
 def _bitwig_user_scripts_dir() -> Path:
@@ -58,6 +72,19 @@ def install_controller(*, force: bool = False, dry_run: bool = False) -> int:
     existed = dst.exists()
     shutil.copyfile(src, dst)
     print(f"[openwig] installed -> {dst}")
+
+    # Copy the bootstrap symbol-mapping DATA file to the openwig data dir, where the controller
+    # reads it at init. The obfuscated names live here as data, not in the controller code.
+    try:
+        data_dst = _data_dir()
+        data_dst.mkdir(parents=True, exist_ok=True)
+        res = files("openwig.controller").joinpath(DEFAULTS_FILENAME)
+        with as_file(res) as p:
+            shutil.copyfile(Path(p), data_dst / DEFAULTS_FILENAME)
+        print(f"[openwig] symbol defaults -> {data_dst / DEFAULTS_FILENAME}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[openwig] WARNING: could not install symbol defaults: {exc}", file=sys.stderr)
+
     if existed:
         # Bitwig watches this file and auto-reloads the script a few seconds after it
         # changes - new handlers go live with no manual step. (A reload can leave value
