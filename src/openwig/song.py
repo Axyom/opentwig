@@ -277,6 +277,24 @@ class Track:
                          {"track": self.idx, "slot": int(slot), "path": str(path)})
         time.sleep(0.5); return self
 
+    def audio_clip(self, path, start=0.0, duration=4.0):
+        """Drop a `.wav`/`.aiff` onto the arranger at `start` (beats) with `duration` (beats).
+
+        Uses the arranger insertion point resolved by `openwig doctor` (run it once per Bitwig
+        build). Sleeps 1.5s after the call: Bitwig decodes the file off-thread and back-to-back
+        inserts can saturate the controller queue."""
+        self.s.b.request("track.insert_audio_clip", {
+            "track": self.idx, "path": str(path),
+            "start": float(start), "duration": float(duration),
+        })
+        time.sleep(1.5); return self
+
+    def audio_clips(self, segments):
+        """Lay several audio clips: `[(path, start, duration), ...]`."""
+        for (path, start, dur) in segments:
+            self.audio_clip(path, start=start, duration=dur)
+        return self
+
     def describe_clip(self):
         """Enumerate every descriptor of the currently-selected clip
         (property IDs + current values). Used to discover stretch / loop / etc.

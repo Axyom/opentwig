@@ -113,6 +113,16 @@ def _print_selftest(rep) -> int:
         if not ok:
             rc = max(rc, 3)
 
+    audio = rep.get("audio")
+    if audio is not None:
+        ok = audio.get("ok")
+        detail = audio.get("detail", "")
+        if audio.get("hrv"):
+            detail += f" (hrv={audio.get('hrv')})"
+        print(f"  audio clip   : {'OK  ' if ok else 'FAIL'}  ({detail})")
+        if not ok:
+            rc = max(rc, 3)
+
     disc = rep.get("discovered")
     if disc:
         print(f"  automation   : structural discovery "

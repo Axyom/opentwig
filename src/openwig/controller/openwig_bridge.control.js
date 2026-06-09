@@ -60,8 +60,13 @@ var SYM = {
     // command hosts, resolved by stable op-id (clip create = 7350, note insert = 7349).
     // Each: Java.type(cls).<field>.<factory>().<exec>(target, argsList). Defaults are seeds.
     clipCmd: { cls: "X2S", field: "fiU", factory: "qgm", exec: "r3B", opid: 7350 },
-    noteCmd: { cls: "alU", field: "r3B", factory: "XaN", exec: "r3B", opid: 7349 }
+    noteCmd: { cls: "alU", field: "r3B", factory: "XaN", exec: "r3B", opid: 7349 },
+    // arranger audio-clip insert. ArrangerClipInsertionPoint (ACIP) is a STABLE class; the
+    // dispatch method, ZjS mode class + its self-typed mode field resolve structurally; the
+    // track-as-HrV accessor (hrv) is validated by execution (doctor inserts a test wav).
+    audio: { hrv: "TD", dispatch: "r3B", zjs: "ZjS", modeField: "r3B" }
 };
+var ACIP_CLASS = "com.bitwig.flt.document.core.iface.clipboard.clip.ArrangerClipInsertionPoint"; // stable
 var gSymSource = "seed";                       // "seed" | "cache" | "discovered"
 var gOpsDone = 0;                            // count of finished document-thread ops (completion signal; see ops.done)
 var gClipNotes = {}, gNoteScroll = 0, gNoteStepSize = 0.25;
@@ -1130,6 +1135,49 @@ function _insertClip(byU, start, dur, notes) {
     return { created: 1, notes: notes.length, start: start, duration: dur };
 }
 
+// ── arranger audio-clip insert ──────────────────────────────────────────────────
+// ArrangerClipInsertionPoint (ACIP) is a STABLE class. Resolve its 5-arg constructor, its
+// (File, mode, hook)->ok dispatch method (the only inherited method whose first arg is a
+// File), the mode class (dispatch param[1]) and the mode singleton (the mode class's only
+// self-typed static field). The track-as-HrV accessor name comes from SYM.audio.hrv (data /
+// cache / validated by doctor). All structural except the HrV accessor.
+function _acipParts() {
+    var ACIP = Java.type(ACIP_CLASS).class, FileC = Java.type("java.io.File").class;
+    var ctors = ACIP.getDeclaredConstructors(), ctor = null;
+    for (var i = 0; i < ctors.length; i++) if (ctors[i].getParameterCount() === 5) { ctor = ctors[i]; break; }
+    if (ctor == null) throw "ACIP 5-arg constructor not found";
+    ctor.setAccessible(true);
+    var dispatch = null, c = ACIP;
+    while (c != null && dispatch == null) {
+        var ms = c.getDeclaredMethods();
+        for (var j = 0; j < ms.length; j++) {
+            var m = ms[j], ps = m.getParameterTypes();
+            if (ps.length === 3 && FileC.isAssignableFrom(ps[0])) { m.setAccessible(true); dispatch = m; break; }
+        }
+        c = c.getSuperclass();
+    }
+    if (dispatch == null) throw "ACIP file-dispatch method not found";
+    var zjsType = dispatch.getParameterTypes()[1];
+    var Mod = Java.type("java.lang.reflect.Modifier"), mode = null, zfs = zjsType.getDeclaredFields();
+    for (var k = 0; k < zfs.length; k++) {
+        if (Mod.isStatic(zfs[k].getModifiers()) && zjsType.isAssignableFrom(zfs[k].getType())) {
+            try { zfs[k].setAccessible(true); mode = zfs[k].get(null); } catch (e) {}
+            if (mode != null) break;
+        }
+    }
+    if (mode == null) throw "audio-insert mode constant not found";
+    return { ctor: ctor, dispatch: dispatch, mode: mode, hrvType: ctor.getParameterTypes()[0] };
+}
+function _insertAudioClip(byU, path, start, dur, hrvName) {
+    var P = _acipParts(), File = Java.type("java.io.File"), Dbl = Java.type("java.lang.Double");
+    var hn = hrvName || SYM.audio.hrv;
+    var hrv = _invokeNoArg(byU, hn);
+    if (hrv == null) throw "track-as-HrV accessor '" + hn + "' returned null";
+    var aip = P.ctor.newInstance(hrv, Dbl.valueOf(start), Dbl.valueOf(dur), null, null);
+    var ok = P.dispatch.invoke(aip, new File(path), P.mode, null);
+    return { dispatched: !!ok };
+}
+
 function _clipCreateAndFill(p) {
     var start = Number(p.start || 0), dur = Number(p.duration || 4);
     var notes = p.notes || [];
@@ -1375,6 +1423,7 @@ function _loadSymbolCache() {
         if (c.SZo) SYM.SZo = c.SZo;
         if (c.clipCmd) _applyCommandSpec(SYM.clipCmd, c.clipCmd);
         if (c.noteCmd) _applyCommandSpec(SYM.noteCmd, c.noteCmd);
+        if (c.audio && c.audio.hrv) SYM.audio = c.audio;
         gSymSource = "cache";
     } else {
         gSymSource = c ? "seed (cache stale; re-run doctor)" : "seed (no cache; run doctor)";
@@ -1551,7 +1600,7 @@ function _runResolverProbe() {
     if (!gBlindDiscovery && rd && caps.descriptor_read.ok) {
         var cacheObj = {
             schema: _CACHE_SCHEMA, fingerprint: _fingerprint(), bitwig: report.bitwig,
-            reader: rd, SZo: SYM.SZo, clipCmd: SYM.clipCmd, noteCmd: SYM.noteCmd,
+            reader: rd, SZo: SYM.SZo, clipCmd: SYM.clipCmd, noteCmd: SYM.noteCmd, audio: SYM.audio,
             verdicts: { automation: caps.automation_write.ok, clip: caps.clip_create.ok,
                         descriptor: caps.descriptor_read.ok, serialize: caps.serialize.ok, normalize: caps.normalize.ok }
         };
@@ -1572,6 +1621,48 @@ var HANDLERS = {
     // ── resolver / self-test (driven by `openwig doctor`) ──
     // Cheap, synchronous: which obfuscated classes still load on this build (no doc thread).
     "resolver.classes": function () { return { bitwig: _hostInfo(), classes: _resolverClasses() }; },
+    // arranger audio-clip insert. SYM.audio.hrv (data/cache/validated) names the track-as-HrV
+    // accessor; p.hrv overrides it (used by doctor to validate candidates). dispatch/ZjS/mode
+    // resolve structurally from the stable ArrangerClipInsertionPoint.
+    "track.insert_audio_clip": function (p) {
+        var trackIdx = bget(p, "track", 0) | 0;
+        var path = "" + bget(p, "path", "");
+        var start = Number(bget(p, "start", 0)), dur = Number(bget(p, "duration", 4));
+        var hrvOverride = p.hrv ? ("" + p.hrv) : null;
+        if (!path) return { error: "no path" };
+        _runOnDocumentThread(cursorTrack, function () {
+            var trackDoc = trackBank.getItemAt(trackIdx).getDeepestTarget();
+            if (trackDoc == null) throw "track " + trackIdx + " has no document target";
+            return _insertAudioClip(trackDoc, path, start, dur, hrvOverride);
+        });
+        return { queued: true, path: path, note: "async; outcome in openwig_bridge.log [auto]" };
+    },
+    // doctor: candidate track-as-HrV accessor names for the SELECTED track (+ resolved parts),
+    // so the SDK can validate each by inserting a test wav. Select a track first.
+    "resolver.audio_candidates": function () {
+        var byU = cursorTrack.getDeepestTarget();
+        if (byU == null) return { error: "select a track first" };
+        var P; try { P = _acipParts(); } catch (e) { return { error: "" + e }; }
+        var cands = [], c = _classOf(byU), seen = {};
+        while (c != null) {
+            var ms = c.getDeclaredMethods();
+            for (var a = 0; a < ms.length; a++) {
+                var am = ms[a]; if (am.getParameterCount() !== 0) continue;
+                var an = "" + am.getName(); if (seen[an]) continue; seen[an] = 1;
+                if (P.hrvType.isAssignableFrom(am.getReturnType())) cands.push(an);
+            }
+            c = c.getSuperclass();
+        }
+        return { hrv_candidates: cands, dispatch: "" + P.dispatch.getName(),
+                 zjs: "" + P.dispatch.getParameterTypes()[1].getName() };
+    },
+    // doctor: record the validated audio HrV accessor + refresh the cache with it.
+    "resolver.set_audio_hrv": function (p) {
+        SYM.audio.hrv = "" + bget(p, "hrv", SYM.audio.hrv);
+        var c = _readCache();
+        if (c) { c.audio = SYM.audio; _writeCache(c); }
+        return { ok: true, hrv: SYM.audio.hrv };
+    },
     // Where SYM's reader names came from this session (cache / seed) + the build fingerprint.
     "resolver.status": function () {
         var c = _readCache();

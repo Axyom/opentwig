@@ -13,11 +13,73 @@ broken path is reported, not silently ignored.
 """
 from __future__ import annotations
 
+import os
+import struct
+import sys
 import time
+import wave
+from pathlib import Path
 
 from openwig.bridge import BridgeClient, BridgeError
 
 PROBE_TRACK = "__openwig_probe__"
+
+
+def _data_dir() -> Path:
+    """openwig data dir, matching the controller's (where the cache + log live)."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(base) / "openwig"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Logs" / "openwig"
+    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(base) / "openwig"
+
+
+def _write_silent_wav(path: Path, seconds: float = 0.1):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    n = int(44100 * seconds)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(44100)
+        w.writeframes(struct.pack("<" + "h" * n, *([0] * n)))
+
+
+def _validate_audio(b, idx):
+    """Validate (and if needed re-resolve) arranger audio-clip insert on track `idx`.
+
+    The dispatch / ZjS / mode resolve structurally controller-side; only the track-as-HrV
+    accessor needs execution validation (audio insert is async, so this is orchestrated here:
+    insert a uniquely-named test wav via a candidate accessor, wait for the decode, and check
+    the descriptor walk surfaces the file name). Returns {ok, detail, hrv}.
+    """
+    res = b.request("resolver.audio_candidates")
+    if res.get("error"):
+        return {"ok": False, "detail": res["error"]}
+    cands = res.get("hrv_candidates") or []
+    data = _data_dir()
+
+    def walk_text():
+        b.request_op("obj.walk", {"max_depth": 16, "max_nodes": 9000}, timeout=12.0)
+        return b.request("obj.walk_result").get("json") or ""
+
+    # try the current default (None override) first, then each candidate
+    for hrv in [None] + cands:
+        marker = "owtest_" + (hrv or "default")
+        wavp = data / (marker + ".wav")
+        try:
+            _write_silent_wav(wavp)
+        except OSError as exc:
+            return {"ok": False, "detail": f"cannot write test wav: {exc}"}
+        params = {"track": idx, "path": str(wavp)}
+        if hrv:
+            params["hrv"] = hrv
+        b.request("track.insert_audio_clip", params)
+        time.sleep(2.5)  # audio decode is async/off-thread
+        if marker in walk_text():
+            if hrv:
+                b.request("resolver.set_audio_hrv", {"hrv": hrv})
+            return {"ok": True, "hrv": hrv or "(default)", "detail": "inserted + read back"}
+    return {"ok": False, "detail": "no HrV accessor produced a clip"}
 
 
 def _occupied(b):
@@ -77,6 +139,11 @@ def run_selftest(b=None, *, timeout=90.0):
             report["connected"] = True
             if res.get("error"):
                 report["error"] = res["error"]
+            # arranger audio-clip insert is validated separately (async; orchestrated here)
+            try:
+                report["audio"] = _validate_audio(b, idx)
+            except BridgeError as exc:
+                report["audio"] = {"ok": False, "detail": f"error ({exc})"}
             return report
         finally:
             # remove every slot that appeared during the probe (covers a failed rename),
