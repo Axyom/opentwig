@@ -45,6 +45,14 @@ Source = "https://github.com/Axyom/openwig"
 # host.getHostVersion() reports major.minor only - see openwig/__init__.py.
 supported-bitwig-versions = ["6"]
 
+[tool.pytest.ini_options]
+# Only collect the tests/ tree, so nothing under scratch/ is ever picked up.
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "live: tests that require a running Bitwig Studio with the OpenwigBridge controller enabled (opt-in via OPENWIG_LIVE=1).",
+]
+
 [tool.setuptools]
 package-dir = { "" = "src" }
 
