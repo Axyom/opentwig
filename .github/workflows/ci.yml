@@ -2,23 +2,26 @@ name: CI
 
 on:
   push:
+    branches: [master]
   pull_request:
 
 jobs:
   tests:
-    name: tests (py${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: tests (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # PyAudioWPatch is win32-only (marker excludes it on linux), so this installs
-      # cleanly here. Live tests auto-skip because OPENWIG_LIVE is unset.
+      # PyAudioWPatch is win32-only (the pip marker skips it on linux) and render.py
+      # imports it lazily, so the package installs + imports on both OSes. Live tests
+      # auto-skip because OPENWIG_LIVE is unset.
       - name: Install package + dev deps
         run: pip install -e .[dev]
       - name: Run tests
