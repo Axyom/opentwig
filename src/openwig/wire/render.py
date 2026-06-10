@@ -11,11 +11,15 @@ asserts the capture isn't silent. CLI: python wire_render.py out.wav BEATS TEMPO
 import sys, time, wave
 from pathlib import Path
 import numpy as np
-import pyaudiowpatch as pa
 
 
 def render_to_wav(bridge, out_path, beats=128.0, tempo=128.0, tail=1.0, lead=0.3):
     """Record Bitwig's loopback output for one pass of the arrangement -> out_path (.wav)."""
+    # WASAPI loopback is Windows-only; PyAudioWPatch is excluded on other platforms by its
+    # pip marker. Import lazily so `import openwig` (and the unit tests / linux CI) work
+    # everywhere; only actually rendering needs the package.
+    import pyaudiowpatch as pa
+
     secs = beats / tempo * 60.0 + tail
     p = pa.PyAudio()
     dev = p.get_default_wasapi_loopback()
