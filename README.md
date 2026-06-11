@@ -10,7 +10,7 @@ Goes where Bitwig's official Controller API can't: build arrangements, devices,
 automation, and full multi-track songs from a Python program, then
 render to `.wav`.
 
-Free and open source (GPL-3.0). Windows only. Early alpha.
+Free and open source (GPL-3.0). Windows (fully supported) and Linux (experimental). Early alpha.
 
 **[Documentation →](https://axyom.github.io/openwig/)**
 
@@ -44,7 +44,7 @@ print(s.render("first.wav"))
 
 | openwig | Bitwig Studio | Python | OS |
 |------------|---------------|--------|----|
-| 0.1.x      | **6.0.6**     | 3.11+  | Windows |
+| 0.1.x      | **6.0.6**     | 3.11+  | Windows; Linux experimental (`render()` needs pulseaudio-utils) |
 
 ## Install
 
@@ -59,7 +59,7 @@ Full guide (requirements, troubleshooting, uninstall): **[Install docs →](http
 
 ## Contributing
 
-Issues and PRs welcome. Currently Windows + Bitwig 6, tested on Bitwig 6.0.6 only.
+Issues and PRs welcome. Tested on Windows + Bitwig 6.0.6; Linux support is experimental (the code paths exist and are unit-tested, but no one has validated against a live Linux Bitwig yet - reports welcome).
 
 Found a bug or have a question? Open an [issue](https://github.com/Axyom/openwig/issues) for bugs, or start a thread in [Discussions](https://github.com/Axyom/openwig/discussions) for questions, ideas, and feedback.
 

@@ -24,8 +24,10 @@ Example:
     s.play(); print(s.render("song.wav"))
 """
 import os
+import sys
 import time
 import warnings
+from pathlib import Path
 from typing import NamedTuple
 from openwig.wire import automation as wa
 from openwig.wire.render import render_to_wav
@@ -44,34 +46,62 @@ class Note(NamedTuple):
     channel: int = 0  # MIDI channel
 
 
-def _find_bitwig_root():
+def _probe_roots(candidates):
+    """First candidate that actually contains Library/devices (the factory-device dir
+    the SDK loads .bwdevice files from), else the first that exists at all, else the
+    first candidate (so the error message names the conventional location)."""
+    for c in candidates:
+        if (Path(c) / "Library" / "devices").is_dir():
+            return str(c).replace("\\", "/").rstrip("/")
+    for c in candidates:
+        if Path(c).is_dir():
+            return str(c).replace("\\", "/").rstrip("/")
+    return str(candidates[0]).replace("\\", "/").rstrip("/")
+
+
+def _find_bitwig_root(platform=None):
+    """Locate the Bitwig install dir per OS. BITWIG_PATH overrides everything."""
     env = os.environ.get("BITWIG_PATH")
     if env:
         return env.replace("\\", "/").rstrip("/")
-    try:
-        import winreg
-        for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
-            for sub in (
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-                r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-            ):
-                try:
-                    with winreg.OpenKey(hive, sub) as uk:
-                        for i in range(winreg.QueryInfoKey(uk)[0]):
-                            try:
-                                with winreg.OpenKey(uk, winreg.EnumKey(uk, i)) as k:
-                                    name = winreg.QueryValueEx(k, "DisplayName")[0]
-                                    if "Bitwig" in name:
-                                        loc = winreg.QueryValueEx(k, "InstallLocation")[0]
-                                        if loc:
-                                            return loc.replace("\\", "/").rstrip("/")
-                            except OSError:
-                                continue
-                except OSError:
-                    continue
-    except ImportError:
-        pass
-    return "C:/Program Files/Bitwig Studio"
+    platform = platform or sys.platform
+    if platform == "win32":
+        try:
+            import winreg
+            for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+                for sub in (
+                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                    r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                ):
+                    try:
+                        with winreg.OpenKey(hive, sub) as uk:
+                            for i in range(winreg.QueryInfoKey(uk)[0]):
+                                try:
+                                    with winreg.OpenKey(uk, winreg.EnumKey(uk, i)) as k:
+                                        name = winreg.QueryValueEx(k, "DisplayName")[0]
+                                        if "Bitwig" in name:
+                                            loc = winreg.QueryValueEx(k, "InstallLocation")[0]
+                                            if loc:
+                                                return loc.replace("\\", "/").rstrip("/")
+                                except OSError:
+                                    continue
+                    except OSError:
+                        continue
+        except ImportError:
+            pass
+        return "C:/Program Files/Bitwig Studio"
+    if platform == "darwin":
+        return _probe_roots([
+            "/Applications/Bitwig Studio.app/Contents/Resources",
+            "/Applications/Bitwig Studio.app/Contents",
+        ])
+    # linux: deb/tarball installs, then flatpak (system, then per-user)
+    return _probe_roots([
+        "/opt/bitwig-studio",
+        "/usr/share/bitwig-studio",
+        "/var/lib/flatpak/app/com.bitwig.BitwigStudio/current/active/files",
+        str(Path.home() / ".local/share/flatpak/app/com.bitwig.BitwigStudio/current/active/files"),
+    ])
 
 
 _BITWIG_ROOT = _find_bitwig_root()

@@ -4,7 +4,10 @@
 
 - **Bitwig Studio 6**
 - **Python 3.11+**
-- **Windows**
+- **Windows** (fully supported) or **Linux** (experimental; `render()` additionally
+  needs `parecord` from pulseaudio-utils, which PipeWire systems provide via
+  pipewire-pulse). Linux support has not yet been validated against a live Bitwig -
+  [reports welcome](https://github.com/Axyom/openwig/issues).
 
 ## 1. Install the Python package
 
